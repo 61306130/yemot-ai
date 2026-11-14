@@ -54,7 +54,13 @@ async function handle(request) {
 
     // ---------- המשך נסיעה קיימת ----------
     if (trip.pending === 'resume') {
-      if (input === '1') return navReply(trip, phone, next, dyn, true);
+      if (input === '1') {
+        // חוזרים למצב ניווט - מכאן ההקשות הבאות מתקדמות בשלבים
+        trip.pending = 'nav';
+        trip.idle = 0;
+        await saveTrip(phone, trip);
+        return navReply(trip, phone, next, dyn, true);
+      }
       trip = { pending: 'ask' };
       await saveTrip(phone, trip);
       return reply(recordRead([await fixed(ASK)], next));
