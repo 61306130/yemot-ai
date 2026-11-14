@@ -19,10 +19,11 @@ function tts(text) {
     .join('.');
 }
 
-// קבלת הקשה אחת (ספרה). אם לא הקישו - מוחזר None
-function tapRead(promptText, n) {
+// קבלת הקשה אחת (ספרה). ההקשה נקלטת כבר בזמן ההקראה, כך שאפשר לקפוץ לידיעה באמצע.
+// before = טקסט מוכן (כבר בפורמט ימות) שיוקרא לפני התפריט. אם לא הקישו - מוחזר None
+function tapRead(promptText, n, before = '') {
   const ops = [`sel${n}`, 'no', '1', '1', '8', 'No', 'no', 'no', '', '', '', 'Ok', 'None'];
-  return `read=${tts(promptText)}=${ops.join(',')}`;
+  return `read=${before ? before + '.' : ''}${tts(promptText)}=${ops.join(',')}`;
 }
 
 const MENU = 'לפרטים על ידיעה הקש את מספרה. לשמיעה חוזרת של המהדורה הקש אפס';
@@ -65,7 +66,7 @@ async function handle(request) {
 
   // כניסה לשלוחה, או בקשה לשמיעה חוזרת
   if (!choice || choice === '0') {
-    return reply(`id_list_message=${fullBulletin()}&${tapRead(MENU, n + 1)}`);
+    return reply(tapRead(MENU, n + 1, fullBulletin()));
   }
 
   // לא הקישו כלום - יוצאים לתפריט הראשי
@@ -78,8 +79,11 @@ async function handle(request) {
     return reply(tapRead(`אין ידיעה מספר ${choice}. ${MENU}`, n + 1));
   }
   return reply(
-    `id_list_message=${tts(`${item.title}. ${item.details || item.summary}`)}&` +
-      tapRead(`לידיעה אחרת הקש את מספרה. לשמיעה חוזרת של המהדורה הקש אפס`, n + 1)
+    tapRead(
+      `לידיעה אחרת הקש את מספרה. לשמיעה חוזרת של המהדורה הקש אפס`,
+      n + 1,
+      tts(`${item.title}. ${item.details || item.summary}`)
+    )
   );
 }
 
