@@ -2,7 +2,7 @@
 // הנסיעה נשמרת לפי מספר הטלפון - אפשר לנתק ולחזור באמצע עד שסוגרים אותה.
 import { reply, readParams, tapRead, recordRead, downloadRecording } from '../../../lib/yemot.js';
 import { say, callFileName } from '../../../lib/voice.js';
-import { transcribe, answer as aiAnswer } from '../../../lib/ai.js';
+import { transcribeBoth, answer as aiAnswer } from '../../../lib/ai.js';
 import {
   loadTrip, saveTrip, deleteTrip, listPlaces, savePlace, geocode, planTrip,
   buildSteps, nextArrival, arrivalText, hhmm,
@@ -79,7 +79,7 @@ async function handle(request) {
       }
       trip = { pending: 'choose', options: result.options, dest: result.to.name, origin: result.from.name };
       await saveTrip(phone, trip);
-      return reply(tapRead([await dyn(optionsText(trip)), await fixed('לבחירה, הקש את מספר האפשרות. לחיפוש חדש, הקש אפס')], next, 10));
+      return reply(tapRead([await dyn(optionsText(trip)), await fixed('לבחירה, הקש את מספר האפשרות. אם אחד המקומות לא נכון, הקש אפס ונסה שוב, ואמור גם את שם העיר')], next, 10));
     }
 
     // ---------- בחירת מסלול ----------
@@ -153,7 +153,7 @@ async function navReply(trip, phone, next, dyn, repeat, prefix = '') {
 function optionsText(trip) {
   const opts = trip.options;
   return (
-    `מצאתי ${opts.length} אפשרויות מ${trip.origin} אל ${trip.dest}. ` +
+    `הבנתי: מ${trip.origin}, אל ${trip.dest}. מצאתי ${opts.length} אפשרויות. ` +
     opts
       .map((o, i) => `אפשרות ${i + 1}: ${o.summary}. ${o.minutes} דקות, יציאה בשעה ${hhmm(o.start)}, הגעה בשעה ${hhmm(o.end)}.`)
       .join(' ')
@@ -163,9 +163,17 @@ function optionsText(trip) {
 // ---------- הבנת הבקשה, חיפוש מקומות ותכנון ----------
 async function search(rec, ext, phone) {
   const audio = await downloadRecording(rec, ext);
-  const { text } = await transcribe(audio);
-  console.log('תחבורה: המתקשר אמר:', text);
-  if (!text) return { say: 'לא שמעתי אותך.' };
+  const versions = await transcribeBoth(
+    audio,
+    'בקשת נסיעה בתחבורה ציבורית בישראל: מאיפה לאיפה. שמות רחובות ומספרי בתים, שכונות, ערים, תחנות, קניונים ובתי חולים.'
+  );
+  console.log('תחבורה: תמלולים:', JSON.stringify(versions));
+  if (!versions.length) return { say: 'לא שמעתי אותך.' };
+  const text =
+    versions.length === 1
+      ? versions[0][1]
+      : `יש שתי גרסאות תמלול של אותה הקלטה (מערכות שונות, ייתכנו שגיאות בשמות). שקול את שתיהן ובחר את מה שהגיוני ככתובת או מקום אמיתי בישראל:\n` +
+        versions.map(([who, t], i) => `גרסה ${i + 1}: ${t}`).join('\n');
 
   const places = await listPlaces(phone);
   const names = places.map((x) => x.name);
