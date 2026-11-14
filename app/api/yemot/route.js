@@ -3,14 +3,12 @@
 // Gemini מבין את ההקלטה ועונה -> ימות מקריאה את התשובה -> חוזר חלילה.
 
 import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
+import { transcribe, answer as aiAnswer } from '../../../lib/ai.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
-// מודלי גיבוי, לפי הסדר, למקרה שהראשי עמוס
-const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const HAS_AI = Boolean(process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY);
 // טוקן לימות בפורמט: מספר_מערכת:סיסמה
 const YEMOT_TOKEN = process.env.YEMOT_TOKEN;
 
@@ -94,62 +92,6 @@ async function downloadRecording(value, extension) {
   return buf;
 }
 
-async function askGemini(history, audio) {
-  const contents = [
-    ...history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
-    {
-      role: 'user',
-      parts: [
-        { inline_data: { mime_type: 'audio/wav', data: audio.toString('base64') } },
-        { text: 'זו ההקלטה של המתקשר. תמלל אותה וענה לו.' },
-      ],
-    },
-  ];
-
-  // אם מודל עמוס או נכשל - עוברים לבא ברשימה
-  const models = [GEMINI_MODEL, ...FALLBACK_MODELS.filter((m) => m !== GEMINI_MODEL)];
-  let lastErr;
-  for (const model of models) {
-    try {
-      return await callGemini(model, contents);
-    } catch (err) {
-      console.error(`מודל ${model} נכשל:`, String(err).slice(0, 200));
-      lastErr = err;
-    }
-  }
-  throw lastErr;
-}
-
-async function callGemini(model, contents) {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      signal: AbortSignal.timeout(12000), // עד 12 שניות לכל ניסיון
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT + '\n\n' + nowText() }] },
-        contents,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              transcript: { type: 'STRING', description: 'מה שהמתקשר אמר' },
-              answer: { type: 'STRING', description: 'התשובה שתוקרא למתקשר' },
-            },
-            required: ['transcript', 'answer'],
-          },
-        },
-      }),
-    }
-  );
-  const data = await res.json();
-  if (!res.ok) throw new Error('Gemini: ' + JSON.stringify(data).slice(0, 300));
-  const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}';
-  return JSON.parse(raw);
-}
-
 async function handle(request) {
   const url = new URL(request.url);
   const p = Object.fromEntries(url.searchParams);
@@ -172,7 +114,7 @@ async function handle(request) {
     return reply('');
   }
 
-  if (!GEMINI_KEY || !YEMOT_TOKEN) {
+  if (!HAS_AI || !YEMOT_TOKEN) {
     return reply('id_list_message=t-השרת עדיין לא הוגדר&go_to_folder=hangup');
   }
 
@@ -215,16 +157,21 @@ async function handle(request) {
       }
     }
 
-    const { transcript, answer } = await askGemini(history, audio);
-    console.log('המתקשר אמר:', transcript, '| AI ענה:', answer);
+    const { text: transcript, provider: sttBy } = await transcribe(audio);
+    if (!transcript) {
+      return reply(recordRead('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל ובסיום הקש סולמית', n + 1));
+    }
+    const { text: answer, provider: aiBy } = await aiAnswer(
+      SYSTEM_PROMPT + '\n\n' + nowText(),
+      [...history, { role: 'user', text: transcript }]
+    );
+    console.log(`המתקשר אמר (${sttBy}):`, transcript, `| AI ענה (${aiBy}):`, answer);
 
     const mem = memory.get(callId) || [];
-    mem.push({ role: 'user', text: transcript || '' }, { role: 'model', text: answer || '' });
+    mem.push({ role: 'user', text: transcript }, { role: 'model', text: answer });
     memory.set(callId, mem.slice(-20));
     if (hasDb) {
-      await saveTurn(callId, phone, transcript || '', answer || '').catch((e) =>
-        console.error('saveTurn:', e)
-      );
+      await saveTurn(callId, phone, transcript, answer).catch((e) => console.error('saveTurn:', e));
     }
 
     return reply(
