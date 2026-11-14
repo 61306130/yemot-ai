@@ -170,11 +170,15 @@ async function search(rec, ext, phone) {
   const places = await listPlaces(phone);
   const names = places.map((x) => x.name);
   const system = `אתה מפענח בקשות לתחבורה ציבורית בישראל. החזר JSON בלבד.
-אם המשתמש מבקש נסיעה: {"intent":"trip","from":"...","to":"..."} - כתוב את המקומות בצורה ברורה לחיפוש, כולל שם העיר אם נאמר.
-אם המשתמש מבקש לשמור מקום: {"intent":"save","name":"שם קצר כמו בית או עבודה","address":"הכתובת המלאה"}
+הטקסט הגיע מתמלול של הקלטה טלפונית ועלול להכיל שגיאות - תקן שמות של ערים, רחובות, שכונות ומקומות מוכרים בישראל לכתיב הנכון.
+לכל מקום החזר אובייקט {"name":"...","city":"..."}:
+- name: שם המקום בלי העיר (רחוב ומספר בית, תחנה, קניון, בית חולים, שכונה וכו')
+- city: שם העיר בכתיב הרשמי. אם לא נאמרה עיר, נחש לפי ההקשר (למשל עיר המוצא), ואם אי אפשר - השאר ריק.
+אם המשתמש מבקש נסיעה: {"intent":"trip","from":{...},"to":{...}}
+אם המשתמש מבקש לשמור מקום: {"intent":"save","name":"שם קצר כמו בית או עבודה","place":{...}}
 אחרת: {"intent":"unknown"}
 מקומות שמורים של המשתמש: ${names.length ? names.join(', ') : 'אין'}.
-אם המשתמש מתייחס למקום שמור (למשל "מהבית"), החזר בשדה את שם המקום השמור בדיוק כפי שהוא ברשימה.`;
+אם המשתמש מתייחס למקום שמור (למשל "מהבית"), החזר עבורו {"saved":"שם המקום השמור בדיוק כפי שהוא ברשימה"}.`;
   const { text: raw } = await aiAnswer(system, [{ role: 'user', text }]);
   let req;
   try {
@@ -183,22 +187,28 @@ async function search(rec, ext, phone) {
     req = { intent: 'unknown' };
   }
 
-  if (req.intent === 'save' && req.name && req.address) {
-    const place = await geocode(req.address);
-    if (!place) return { say: `לא מצאתי את הכתובת ${req.address}.` };
+  console.log('תחבורה: פוענח:', JSON.stringify(req));
+  const label = (x) => (typeof x === 'string' ? x : [x?.name, x?.city].filter(Boolean).join(' '));
+
+  if (req.intent === 'save' && req.name && req.place?.name) {
+    const place = await geocode(req.place);
+    if (!place) return { say: `לא מצאתי את הכתובת ${label(req.place)}.` };
     await savePlace(phone, req.name.trim(), place);
     return { say: `שמרתי את ${place.name} בתור ${req.name}.` };
   }
   if (req.intent !== 'trip' || !req.to) return { say: 'לא הבנתי מאיפה לאיפה אתה רוצה לנסוע.' };
   if (!req.from) return { say: 'לא שמעתי מאיפה אתה יוצא.' };
 
-  const resolve = async (s) => {
-    const saved = places.find((x) => x.name === s.trim());
-    return saved ? { name: saved.name, lat: saved.lat, lon: saved.lon } : geocode(s);
+  const resolve = async (x) => {
+    const savedName = x?.saved || (typeof x === 'string' ? x : null);
+    const saved = savedName && places.find((pl) => pl.name === String(savedName).trim());
+    if (saved) return { name: saved.name, lat: saved.lat, lon: saved.lon };
+    return geocode(typeof x === 'string' ? x : { name: x?.name || '', city: x?.city || '' });
   };
   const [from, to] = await Promise.all([resolve(req.from), resolve(req.to)]);
-  if (!from) return { say: `לא מצאתי את המקום ${req.from}.` };
-  if (!to) return { say: `לא מצאתי את המקום ${req.to}.` };
+  console.log('תחבורה: נמצא:', from?.name, '->', to?.name);
+  if (!from) return { say: `לא מצאתי את המקום ${label(req.from)}.` };
+  if (!to) return { say: `לא מצאתי את המקום ${label(req.to)}.` };
 
   const options = await planTrip(from, to);
   if (!options.length) return { say: `לא מצאתי מסלול בתחבורה ציבורית מ${from.name} אל ${to.name} בשעות הקרובות.` };
