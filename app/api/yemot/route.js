@@ -3,7 +3,7 @@
 // Gemini מבין את ההקלטה ועונה -> ימות מקריאה את התשובה -> חוזר חלילה.
 
 import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
-import { transcribe, answer as aiAnswer } from '../../../lib/ai.js';
+import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -21,6 +21,12 @@ const SYSTEM_PROMPT =
 - כתוב מספרים במילים כשזה קצר.
 אם לא שמעת או לא הבנת את השאלה, בקש בנימוס לחזור עליה.
 ייתכן שההודעות הקודמות בשיחה הן משיחות טלפון קודמות עם אותו מתקשר. השתמש בהן כדי לזכור מה סיפר לך ועל מה דיברתם.`;
+
+// הוראה לשלב הראשון: להחליט אם צריך חיפוש באינטרנט
+const SEARCH_RULE = `
+אין לך גישה ישירה לאינטרנט. אם כדי לענות נכון צריך מידע עדכני מהאינטרנט
+(חדשות, אירועים מהימים האחרונים, מזג אוויר, תוצאות ספורט, מחירים, שערי מטבע, לוחות זמנים, או כשהמתקשר מבקש במפורש לחפש),
+ענה רק במילה SEARCH ובלי שום דבר נוסף. בכל מקרה אחר ענה כרגיל.`;
 
 // התאריך והשעה העכשוויים בישראל - נשלחים ל-AI בכל פנייה
 function nowText() {
@@ -161,10 +167,18 @@ async function handle(request) {
     if (!transcript) {
       return reply(recordRead('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל ובסיום הקש סולמית', n + 1));
     }
-    const { text: answer, provider: aiBy } = await aiAnswer(
-      SYSTEM_PROMPT + '\n\n' + nowText(),
-      [...history, { role: 'user', text: transcript }]
+    const convo = [...history, { role: 'user', text: transcript }];
+    let { text: answer, provider: aiBy } = await aiAnswer(
+      SYSTEM_PROMPT + '\n' + SEARCH_RULE + '\n\n' + nowText(),
+      convo
     );
+    // ה-AI ביקש חיפוש באינטרנט
+    if (/^\W*SEARCH\W*$/i.test(answer.trim())) {
+      ({ text: answer, provider: aiBy } = await searchAnswer(
+        SYSTEM_PROMPT + '\nחפש באינטרנט את המידע העדכני וענה על סמך מה שמצאת. בלי קישורים ובלי ציון מקורות.\n\n' + nowText(),
+        convo
+      ));
+    }
     console.log(`המתקשר אמר (${sttBy}):`, transcript, `| AI ענה (${aiBy}):`, answer);
 
     const mem = memory.get(callId) || [];
