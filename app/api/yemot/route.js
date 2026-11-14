@@ -175,10 +175,19 @@ async function handle(request) {
     );
     // ה-AI ביקש חיפוש באינטרנט
     if (/^\W*SEARCH\W*$/i.test(answer.trim())) {
-      ({ text: answer, provider: aiBy } = await searchAnswer(
-        SYSTEM_PROMPT + '\nחפש באינטרנט את המידע העדכני וענה על סמך מה שמצאת. בלי קישורים ובלי ציון מקורות.\n\n' + nowText(),
-        convo
-      ));
+      try {
+        ({ text: answer, provider: aiBy } = await searchAnswer(
+          SYSTEM_PROMPT + '\nחפש באינטרנט את המידע העדכני וענה על סמך מה שמצאת. בלי קישורים ובלי ציון מקורות.\n\n' + nowText(),
+          convo
+        ));
+      } catch (e) {
+        // החיפוש לא זמין - עונים בכל זאת, בלי אינטרנט, ואומרים את זה למתקשר
+        console.error('חיפוש לא זמין, עונה בלי אינטרנט:', String(e?.message || e).slice(0, 200));
+        ({ text: answer, provider: aiBy } = await aiAnswer(
+          SYSTEM_PROMPT + '\nכרגע אין לך גישה לאינטרנט. אמור בקצרה שאינך יכול לבדוק מידע עדכני כרגע, וענה כמיטב ידיעתך אם אפשר. אל תענה במילה SEARCH.\n\n' + nowText(),
+          convo
+        ));
+      }
     }
     console.log(`המתקשר אמר (${sttBy}):`, transcript, `| AI ענה (${aiBy}):`, answer);
 

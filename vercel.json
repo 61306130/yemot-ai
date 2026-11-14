@@ -1,5 +1,11 @@
 {
   "crons": [
-    { "path": "/api/podcast", "schedule": "0 12 * * *" }
+    {
+      "path": "/api/podcast",
+      "schedule": "0 12 * * *"
+    }
+  ],
+  "regions": [
+    "fra1"
   ]
 }
