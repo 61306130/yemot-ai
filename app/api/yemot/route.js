@@ -21,6 +21,16 @@ const SYSTEM_PROMPT =
 - כתוב מספרים במילים כשזה קצר.
 אם לא שמעת או לא הבנת את השאלה, בקש בנימוס לחזור עליה.`;
 
+// התאריך והשעה העכשוויים בישראל - נשלחים ל-AI בכל פנייה
+function nowText() {
+  const now = new Date();
+  const tz = { timeZone: 'Asia/Jerusalem' };
+  const time = now.toLocaleTimeString('he-IL', { ...tz, hour: '2-digit', minute: '2-digit' });
+  const date = now.toLocaleDateString('he-IL', { ...tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const heb = now.toLocaleDateString('he-IL-u-ca-hebrew', { ...tz, day: 'numeric', month: 'long', year: 'numeric' });
+  return `מידע עדכני: עכשיו השעה ${time} בישראל. התאריך היום: ${date}, ${heb}. השתמש במידע הזה כששואלים על שעה או תאריך.`;
+}
+
 // זיכרון שיחה זמני (בשלב הבא יעבור למסד נתונים)
 const memory = globalThis.__yemotMemory || (globalThis.__yemotMemory = new Map());
 
@@ -115,7 +125,7 @@ async function callGemini(model, contents) {
       signal: AbortSignal.timeout(12000), // עד 12 שניות לכל ניסיון
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT + '\n\n' + nowText() }] },
         contents,
         generationConfig: {
           responseMimeType: 'application/json',
