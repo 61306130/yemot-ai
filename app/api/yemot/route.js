@@ -2,6 +2,8 @@
 // המתקשר מדבר -> ימות מקליטה -> השרת מוריד את ההקלטה מימות ->
 // Gemini מבין את ההקלטה ועונה -> ימות מקריאה את התשובה -> חוזר חלילה.
 
+import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
@@ -19,7 +21,8 @@ const SYSTEM_PROMPT =
 - ענה בקצרה, בדרך כלל 2 עד 4 משפטים.
 - בלי רשימות, כוכביות, אימוג'י, קישורים או סימנים מיוחדים.
 - כתוב מספרים במילים כשזה קצר.
-אם לא שמעת או לא הבנת את השאלה, בקש בנימוס לחזור עליה.`;
+אם לא שמעת או לא הבנת את השאלה, בקש בנימוס לחזור עליה.
+ייתכן שההודעות הקודמות בשיחה הן משיחות טלפון קודמות עם אותו מתקשר. השתמש בהן כדי לזכור מה סיפר לך ועל מה דיברתם.`;
 
 // התאריך והשעה העכשוויים בישראל - נשלחים ל-AI בכל פנייה
 function nowText() {
@@ -159,10 +162,13 @@ async function handle(request) {
   console.log('פנייה מימות:', p);
 
   const callId = p.ApiCallId || 'unknown';
+  // מזהים את המתקשר לפי מספר הטלפון (מספר חסוי - בלי זיכרון בין שיחות)
+  const phone = /^\d{5,}$/.test(p.ApiPhone || '') ? p.ApiPhone : `hidden-${callId}`;
 
   // המתקשר ניתק
   if (p.hangup === 'yes') {
     memory.delete(callId);
+    if (hasDb) await endCall(callId).catch((e) => console.error('endCall:', e));
     return reply('');
   }
 
@@ -177,21 +183,49 @@ async function handle(request) {
     .sort((a, b) => a - b);
   const n = recs.length ? recs[recs.length - 1] : 0;
 
-  // כניסה לשלוחה: הודעת פתיחה ובקשת הקלטה ראשונה
+  // כניסה לשלוחה: זיהוי המתקשר, הודעת פתיחה ובקשת הקלטה ראשונה
   if (n === 0) {
-    return reply(
-      recordRead('שלום. אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית', 1)
-    );
+    let greeting = 'שלום. אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
+    if (hasDb) {
+      try {
+        const { caller, previousMessages } = await startCall(callId, phone);
+        if (caller.blocked) {
+          return reply('id_list_message=t-הגישה למערכת חסומה&go_to_folder=hangup');
+        }
+        if (previousMessages > 0) {
+          const name = caller.name ? ` ${caller.name}` : '';
+          greeting = `שלום${name}, טוב לשמוע ממך שוב. אני זוכר על מה דיברנו. אפשר להמשיך מאיפה שעצרנו או לשאול משהו חדש. דבר אחרי הצליל ובסיום הקש סולמית`;
+        }
+      } catch (e) {
+        console.error('startCall:', e);
+      }
+    }
+    return reply(recordRead(greeting, 1));
   }
 
   try {
     const audio = await downloadRecording(p[`rec${n}`], p.ApiExtension);
-    const history = memory.get(callId) || [];
+
+    let history = memory.get(callId) || [];
+    if (hasDb) {
+      try {
+        history = await getHistory(phone);
+      } catch (e) {
+        console.error('getHistory:', e);
+      }
+    }
+
     const { transcript, answer } = await askGemini(history, audio);
     console.log('המתקשר אמר:', transcript, '| AI ענה:', answer);
 
-    history.push({ role: 'user', text: transcript || '' }, { role: 'model', text: answer || '' });
-    memory.set(callId, history.slice(-20));
+    const mem = memory.get(callId) || [];
+    mem.push({ role: 'user', text: transcript || '' }, { role: 'model', text: answer || '' });
+    memory.set(callId, mem.slice(-20));
+    if (hasDb) {
+      await saveTurn(callId, phone, transcript || '', answer || '').catch((e) =>
+        console.error('saveTurn:', e)
+      );
+    }
 
     return reply(
       `id_list_message=${toYemotText(answer)}&` +
