@@ -1,5 +1,6 @@
-// שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה, ואז אפשר להקיש מספר ידיעה לפרטים.
+// שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה בקול טבעי, ואפשר להקיש מספר ידיעה בכל רגע.
 import { getBulletin } from '../../../lib/news.js';
+import { say } from '../../../lib/voice.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -9,24 +10,16 @@ function reply(text) {
   return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
 
-// טקסט להקראה: ימות לא מקבלת . - " ' & | = , בתוך הקראה, לכן כל משפט הוא הודעה נפרדת
-function tts(text) {
-  return String(text)
-    .split(/[.!?\n:]+/)
-    .map((s) => s.replace(/[.\-"'&|=,*#_~<>()\[\]]/g, ' ').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .map((p) => 't-' + p)
-    .join('.');
+// קבלת הקשה אחת. msgs = הודעות מוכנות לימות. ההקשה נקלטת גם באמצע ההקראה.
+// secWait = כמה שניות לחכות להקשה בסוף. אם לא הקישו - מוחזר None
+function tapRead(msgs, name, secWait = 8) {
+  const ops = [name, 'no', '1', '1', String(secWait), 'No', 'no', 'no', '', '', '', 'Ok', 'None'];
+  return `read=${msgs.filter(Boolean).join('.')}=${ops.join(',')}`;
 }
 
-// קבלת הקשה אחת (ספרה). ההקשה נקלטת כבר בזמן ההקראה, כך שאפשר לקפוץ לידיעה באמצע.
-// before = טקסט מוכן (כבר בפורמט ימות) שיוקרא לפני התפריט. אם לא הקישו - מוחזר None
-function tapRead(promptText, n, before = '') {
-  const ops = [`sel${n}`, 'no', '1', '1', '8', 'No', 'no', 'no', '', '', '', 'Ok', 'None'];
-  return `read=${before ? before + '.' : ''}${tts(promptText)}=${ops.join(',')}`;
-}
-
-const MENU = 'לפרטים על ידיעה הקש את מספרה. לשמיעה חוזרת של המהדורה הקש אפס';
+const MENU = 'לפרטים על ידיעה, הקש את מספרה. לשמיעה חוזרת של המהדורה, הקש אפס';
+const MENU_AFTER_ITEM = 'לידיעה אחרת, הקש את מספרה. לשמיעה חוזרת של המהדורה, הקש אפס';
+const WAIT = 'אנא המתינו, בזמן שאנו מכינים עבורכם את המהדורה';
 
 async function handle(request) {
   const url = new URL(request.url);
@@ -45,12 +38,18 @@ async function handle(request) {
   const n = sels.length ? sels[sels.length - 1] : 0;
   const choice = n ? String(p[`sel${n}`]) : null;
 
+  // כניסה לשלוחה: אם אין מהדורה עדכנית - קודם הודעת המתנה, ומיד אחריה ימות חוזרת לכאן (wait=None)
+  if (!choice && !p.wait) {
+    const ready = await getBulletin({ build: false }).catch(() => null);
+    if (!ready) return reply(tapRead([await say(WAIT, { cache: true })], 'wait', 1));
+  }
+
   let bulletin;
   try {
     bulletin = await getBulletin();
   } catch (err) {
     console.error('חדשות:', err);
-    return reply(`id_list_message=${tts('סליחה, לא ניתן לטעון את החדשות כרגע. נסו שוב בעוד כמה דקות')}&go_to_folder=/`);
+    return reply(`id_list_message=${await say('סליחה, לא ניתן לטעון את החדשות כרגע. נסו שוב בעוד כמה דקות', { cache: true })}&go_to_folder=/`);
   }
   const items = bulletin.items;
   const time = new Date(bulletin.createdAt).toLocaleTimeString('he-IL', {
@@ -59,32 +58,32 @@ async function handle(request) {
     minute: '2-digit',
   });
 
-  const fullBulletin = () =>
-    tts(`מהדורת חדשות מעודכנת לשעה ${time.replace(':', ' ו ')} דקות`) +
-    '.' +
-    items.map((x, i) => tts(`ידיעה ${i + 1}. ${x.title}. ${x.summary}`)).join('.');
+  // המהדורה המלאה כטקסט אחד: "1. כותרת. תקציר. 2. ..." - נוצרת בקול פעם אחת ונשמרת
+  const bulletinText =
+    `מהדורת חדשות, מעודכנת לשעה ${time}.\n` +
+    items.map((x, i) => `${i + 1}. ${x.title}. ${x.summary}`).join('\n');
 
   // כניסה לשלוחה, או בקשה לשמיעה חוזרת
   if (!choice || choice === '0') {
-    return reply(tapRead(MENU, n + 1, fullBulletin()));
+    const [b, m] = await Promise.all([say(bulletinText, { cache: true }), say(MENU, { cache: true })]);
+    return reply(tapRead([b, m], `sel${n + 1}`));
   }
 
   // לא הקישו כלום - יוצאים לתפריט הראשי
   if (choice === 'None') {
-    return reply(`id_list_message=${tts('תודה שהאזנתם')}&go_to_folder=/`);
+    return reply(`id_list_message=${await say('תודה שהאזנתם', { cache: true })}&go_to_folder=/`);
   }
 
   const item = items[Number(choice) - 1];
   if (!item) {
-    return reply(tapRead(`אין ידיעה מספר ${choice}. ${MENU}`, n + 1));
+    const [a, m] = await Promise.all([say(`אין ידיעה מספר ${choice}`, { cache: true }), say(MENU, { cache: true })]);
+    return reply(tapRead([a, m], `sel${n + 1}`));
   }
-  return reply(
-    tapRead(
-      `לידיעה אחרת הקש את מספרה. לשמיעה חוזרת של המהדורה הקש אפס`,
-      n + 1,
-      tts(`${item.title}. ${item.details || item.summary}`)
-    )
-  );
+  const [d, m] = await Promise.all([
+    say(`${item.title}. ${item.details || item.summary}`, { cache: true }),
+    say(MENU_AFTER_ITEM, { cache: true }),
+  ]);
+  return reply(tapRead([d, m], `sel${n + 1}`));
 }
 
 export const GET = handle;

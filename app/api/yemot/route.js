@@ -4,6 +4,7 @@
 
 import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
 import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
+import { say, callFileName } from '../../../lib/voice.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -60,8 +61,8 @@ function toYemotText(text) {
   return parts.map((p) => 't-' + p).join('.');
 }
 
-// בקשת הקלטה מהמתקשר
-function recordRead(promptText, n) {
+// בקשת הקלטה מהמתקשר. msg = הודעה מוכנה לימות (f-... או t-...)
+function recordRead(msg, n) {
   const ops = [
     `rec${n}`, // שם המשתנה
     'no',      // לא לבקש שוב אם כבר קיים
@@ -74,7 +75,7 @@ function recordRead(promptText, n) {
     '1',       // אורך מינימלי בשניות
     '60',      // אורך מקסימלי בשניות
   ];
-  return `read=${toYemotText(promptText)}=${ops.join(',')}`;
+  return `read=${msg}=${ops.join(',')}`;
 }
 
 async function downloadRecording(value, extension) {
@@ -148,7 +149,7 @@ async function handle(request) {
         console.error('startCall:', e);
       }
     }
-    return reply(recordRead(greeting, 1));
+    return reply(recordRead(await say(greeting, { cache: true }), 1));
   }
 
   try {
@@ -165,7 +166,7 @@ async function handle(request) {
 
     const { text: transcript, provider: sttBy } = await transcribe(audio);
     if (!transcript) {
-      return reply(recordRead('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל ובסיום הקש סולמית', n + 1));
+      return reply(recordRead(await say('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל, ובסיום הקש סולמית', { cache: true }), n + 1));
     }
     const convo = [...history, { role: 'user', text: transcript }];
     let { text: answer, provider: aiBy } = await aiAnswer(
@@ -188,13 +189,15 @@ async function handle(request) {
       await saveTurn(callId, phone, transcript, answer).catch((e) => console.error('saveTurn:', e));
     }
 
-    return reply(
-      `id_list_message=${toYemotText(answer)}&` +
-        recordRead('אפשר לשאול עוד שאלה אחרי הצליל', n + 1)
-    );
+    // התשובה בקול טבעי (קובץ קבוע לכל שיחה), והשאלה הבאה מהמטמון
+    const [answerMsg, nextMsg] = await Promise.all([
+      say(answer, { name: callFileName(callId, n) }),
+      say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
+    ]);
+    return reply(`id_list_message=${answerMsg}&` + recordRead(nextMsg, n + 1));
   } catch (err) {
     console.error('שגיאה:', err);
-    return reply(recordRead('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', n + 1));
+    return reply(recordRead(await say('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', { cache: true }), n + 1));
   }
 }
 
