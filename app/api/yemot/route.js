@@ -7,6 +7,8 @@ export const maxDuration = 60;
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+// מודלי גיבוי, לפי הסדר, למקרה שהראשי עמוס
+const FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 // טוקן לימות בפורמט: מספר_מערכת:סיסמה
 const YEMOT_TOKEN = process.env.YEMOT_TOKEN;
 
@@ -91,10 +93,26 @@ async function askGemini(history, audio) {
     },
   ];
 
+  // אם מודל עמוס או נכשל - עוברים לבא ברשימה
+  const models = [GEMINI_MODEL, ...FALLBACK_MODELS.filter((m) => m !== GEMINI_MODEL)];
+  let lastErr;
+  for (const model of models) {
+    try {
+      return await callGemini(model, contents);
+    } catch (err) {
+      console.error(`מודל ${model} נכשל:`, String(err).slice(0, 200));
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
+async function callGemini(model, contents) {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(12000), // עד 12 שניות לכל ניסיון
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
