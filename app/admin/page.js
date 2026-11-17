@@ -203,7 +203,8 @@ const KEY = 'yemot_admin_key';
 function useApi() {
   const keyRef = useRef(typeof window !== 'undefined' ? sessionStorage.getItem(KEY) || '' : '');
   return useCallback(async (path, opts = {}) => {
-    const r = await fetch(`/api/admin/${path}`, {
+    const [pp, qs] = path.split('?');
+      const r = await fetch(`/api/admin?p=${encodeURIComponent(pp)}${qs ? '&' + qs : ''}`, {
       method: opts.method || 'GET',
       headers: { 'x-admin-key': keyRef.current, 'content-type': 'application/json' },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -243,7 +244,7 @@ function Login({ onIn }) {
     e.preventDefault();
     setBusy(true); setErr('');
     try {
-      const r = await fetch('/api/admin/login', {
+      const r = await fetch('/api/admin?p=login', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ password: pw }),
       });

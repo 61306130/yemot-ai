@@ -7,6 +7,7 @@ import {
   loadTrip, saveTrip, deleteTrip, listPlaces, savePlace, geocode, planTrip,
   buildSteps, nextArrival, arrivalText, hhmm,
 } from '../../../lib/transit.js';
+import { logError } from '../../../lib/store.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -83,7 +84,11 @@ async function handle(request) {
         await saveTrip(phone, trip);
         return reply(recordRead([await dyn(result.say), await fixed('לנסיעה, אמור מאיפה לאיפה אחרי הצליל, ובסיום הקש סולמית')], next));
       }
-      trip = { pending: 'choose', options: result.options, dest: result.to.name, origin: result.from.name };
+      trip = {
+        pending: 'choose', options: result.options,
+        dest: result.to.name, origin: result.from.name,
+        fromPlace: result.from, toPlace: result.to,
+      };
       await saveTrip(phone, trip);
       return reply(tapRead([await dyn(optionsText(trip)), await fixed('לבחירה, הקש את מספר האפשרות. אם אחד המקומות לא נכון, הקש אפס ונסה שוב, ואמור גם את שם העיר')], next, 10));
     }
@@ -99,9 +104,33 @@ async function handle(request) {
         await saveTrip(phone, trip);
         return reply(recordRead([await fixed(ASK)], next));
       }
-      trip = { stage: 'nav', pending: 'nav', dest: trip.dest, steps: buildSteps(opt, trip.dest), step: 0, idle: 0 };
+      trip = {
+        stage: 'nav', pending: 'nav', dest: trip.dest, origin: trip.origin,
+        fromPlace: trip.fromPlace, toPlace: trip.toPlace,
+        steps: buildSteps(opt, trip.dest), step: 0, idle: 0,
+      };
       await saveTrip(phone, trip);
       return navReply(trip, phone, next, dyn, false, `בחרת: ${opt.summary}. `);
+    }
+
+    // ---------- הצעת נסיעה חזרה (אחרי שהגענו) ----------
+    if (trip.pending === 'return_offer') {
+      if (input === '1' && trip.fromPlace && trip.toPlace) {
+        const options = await planTrip(trip.toPlace, trip.fromPlace);
+        if (!options.length) {
+          await deleteTrip(phone);
+          return reply(`id_list_message=${await dyn(`לא מצאתי כרגע מסלול חזרה אל ${trip.origin}. נסיעה טובה`)}&go_to_folder=/`);
+        }
+        trip = {
+          pending: 'choose', options,
+          dest: trip.origin, origin: trip.dest,
+          fromPlace: trip.toPlace, toPlace: trip.fromPlace,
+        };
+        await saveTrip(phone, trip);
+        return reply(tapRead([await dyn(optionsText(trip)), await fixed('לבחירה, הקש את מספר האפשרות. לסיום, הקש אפס')], next, 10));
+      }
+      await deleteTrip(phone);
+      return reply(`id_list_message=${await fixed('נסיעה טובה ולהתראות')}&go_to_folder=/`);
     }
 
     // ---------- ניווט ----------
@@ -129,7 +158,7 @@ async function handle(request) {
     await saveTrip(phone, { pending: 'ask' });
     return reply(recordRead([await fixed(ASK)], next));
   } catch (err) {
-    console.error('תחבורה: שגיאה', err);
+    logError('transit', err);
     await saveTrip(phone, { pending: 'ask' }).catch(() => {});
     return reply(recordRead([await fixed('סליחה, הייתה תקלה. נסה שוב. אמור מאיפה לאיפה אחרי הצליל, ובסיום הקש סולמית')], next));
   }
@@ -139,6 +168,13 @@ async function handle(request) {
 async function navReply(trip, phone, next, dyn, repeat, prefix = '') {
   const step = trip.steps[trip.step];
   if (step.type === 'arrived') {
+    // הגענו - מציעים נסיעה חזרה במקום פשוט לסיים
+    if (trip.fromPlace && trip.toPlace) {
+      trip.pending = 'return_offer';
+      trip.stage = 'return_offer';
+      await saveTrip(phone, trip);
+      return reply(tapRead([await dyn(prefix + step.text + ` לתכנון נסיעה חזרה אל ${trip.origin}, הקש 1. לסיום, הקש כוכבית`)], next, 8));
+    }
     await deleteTrip(phone);
     return reply(`id_list_message=${await dyn(prefix + step.text)}&go_to_folder=/`);
   }
@@ -156,12 +192,24 @@ async function navReply(trip, phone, next, dyn, repeat, prefix = '') {
   return reply(tapRead([await dyn(text)], next, 30));
 }
 
+function transfersWord(t) {
+  if (t <= 0) return 'נסיעה ישירה';
+  if (t === 1) return 'החלפה אחת';
+  if (t === 2) return 'שתי החלפות';
+  return `${t} החלפות`;
+}
+
 function optionsText(trip) {
   const opts = trip.options;
+  const count = opts.length === 1 ? 'אפשרות אחת' : `${opts.length} אפשרויות`;
   return (
-    `הבנתי: מ${trip.origin}, אל ${trip.dest}. מצאתי ${opts.length} אפשרויות. ` +
+    `הבנתי: מ${trip.origin}, אל ${trip.dest}. מצאתי ${count}. ` +
     opts
-      .map((o, i) => `אפשרות ${i + 1}: ${o.summary}. ${o.minutes} דקות, יציאה בשעה ${hhmm(o.start)}, הגעה בשעה ${hhmm(o.end)}.`)
+      .map(
+        (o, i) =>
+          `אפשרות ${i + 1}: ${o.summary}. ${transfersWord(o.transfers)}. ` +
+          `${o.minutes} דקות. יציאה בשעה ${hhmm(o.start)}, הגעה בשעה ${hhmm(o.end)}.`
+      )
       .join(' ')
   );
 }
@@ -188,7 +236,12 @@ async function search(rec, ext, phone) {
 לכל מקום החזר אובייקט {"name":"...","city":"..."}:
 - name: שם המקום בלי העיר (רחוב ומספר בית, תחנה, קניון, בית חולים, שכונה וכו')
 - city: שם העיר בכתיב הרשמי. אם לא נאמרה עיר, נחש לפי ההקשר (למשל עיר המוצא), ואם אי אפשר - השאר ריק.
-אם המשתמש מבקש נסיעה: {"intent":"trip","from":{...},"to":{...}}
+אם המשתמש מבקש נסיעה: {"intent":"trip","from":{...},"to":{...},"when":{...}}
+שדה when אופציונלי, רק אם המשתמש ציין זמן:
+- {"inMinutes":60} אם אמר "בעוד שעה" / "בעוד חצי שעה" וכדומה.
+- {"atTime":"HH:MM","arriveBy":false} אם אמר "בשמונה בבוקר" (יציאה בשעה זו).
+- {"atTime":"HH:MM","arriveBy":true} אם אמר "אני צריך להגיע עד תשע" (הגעה עד שעה זו).
+אם לא צוין זמן, אל תכלול את השדה when (ברירת מחדל: עכשיו).
 אם המשתמש מבקש לשמור מקום: {"intent":"save","name":"שם קצר כמו בית או עבודה","place":{...}}
 אחרת: {"intent":"unknown"}
 מקומות שמורים של המשתמש: ${names.length ? names.join(', ') : 'אין'}.
@@ -224,7 +277,31 @@ async function search(rec, ext, phone) {
   if (!from) return { say: `לא מצאתי את המקום ${label(req.from)}.` };
   if (!to) return { say: `לא מצאתי את המקום ${label(req.to)}.` };
 
-  const options = await planTrip(from, to);
-  if (!options.length) return { say: `לא מצאתי מסלול בתחבורה ציבורית מ${from.name} אל ${to.name} בשעות הקרובות.` };
+  const plan = parseWhen(req.when);
+  const options = await planTrip(from, to, plan);
+  if (!options.length) {
+    const whenNote = plan.when ? ' בזמן שביקשת' : ' בשעות הקרובות';
+    return { say: `לא מצאתי מסלול בתחבורה ציבורית מ${from.name} אל ${to.name}${whenNote}.` };
+  }
   return { from, to, options };
+}
+
+// הפיכת תיאור הזמן מה-AI ל-{ when: Date, arriveBy }
+function parseWhen(when) {
+  if (!when || typeof when !== 'object') return {};
+  try {
+    if (when.inMinutes > 0) return { when: new Date(Date.now() + when.inMinutes * 60000), arriveBy: false };
+    if (when.atTime && /^\d{1,2}:\d{2}$/.test(when.atTime)) {
+      const [h, m] = when.atTime.split(':').map(Number);
+      // בונים תאריך בשעון ישראל, להיום. אם השעה כבר עברה - למחר
+      const now = new Date();
+      const il = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+      il.setHours(h, m, 0, 0);
+      if (il.getTime() < now.getTime() - 60000) il.setDate(il.getDate() + 1);
+      // התאמה חזרה ל-UTC דרך הפרש שעון ישראל
+      const offset = now.getTime() - new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getTime();
+      return { when: new Date(il.getTime() + offset), arriveBy: !!when.arriveBy };
+    }
+  } catch {}
+  return {};
 }

@@ -5,6 +5,7 @@
 import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
 import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 import { say, callFileName } from '../../../lib/voice.js';
+import { getSettings, logError } from '../../../lib/store.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -134,7 +135,8 @@ async function handle(request) {
 
   // כניסה לשלוחה: זיהוי המתקשר, הודעת פתיחה ובקשת הקלטה ראשונה
   if (n === 0) {
-    let greeting = 'שלום. אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
+    const cfg = await getSettings().catch(() => ({}));
+    let greeting = cfg['bot.greeting'] || 'שלום. אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
     if (hasDb) {
       try {
         const { caller, previousMessages } = await startCall(callId, phone);
@@ -169,22 +171,25 @@ async function handle(request) {
       return reply(recordRead(await say('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל, ובסיום הקש סולמית', { cache: true }), n + 1));
     }
     const convo = [...history, { role: 'user', text: transcript }];
+    const st = await getSettings().catch(() => ({}));
+    const BASE = SYSTEM_PROMPT + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
+    const searchOn = st['bot.search'] !== false;
     let { text: answer, provider: aiBy } = await aiAnswer(
-      SYSTEM_PROMPT + '\n' + SEARCH_RULE + '\n\n' + nowText(),
+      BASE + (searchOn ? '\n' + SEARCH_RULE : '') + '\n\n' + nowText(),
       convo
     );
     // ה-AI ביקש חיפוש באינטרנט
     if (/^\W*SEARCH\W*$/i.test(answer.trim())) {
       try {
         ({ text: answer, provider: aiBy } = await searchAnswer(
-          SYSTEM_PROMPT + '\nחפש באינטרנט את המידע העדכני וענה על סמך מה שמצאת. בלי קישורים ובלי ציון מקורות.\n\n' + nowText(),
+          BASE + '\nחפש באינטרנט את המידע העדכני וענה על סמך מה שמצאת. בלי קישורים ובלי ציון מקורות.\n\n' + nowText(),
           convo
         ));
       } catch (e) {
         // החיפוש לא זמין - עונים בכל זאת, בלי אינטרנט, ואומרים את זה למתקשר
         console.error('חיפוש לא זמין, עונה בלי אינטרנט:', String(e?.message || e).slice(0, 200));
         ({ text: answer, provider: aiBy } = await aiAnswer(
-          SYSTEM_PROMPT + '\nכרגע אין לך גישה לאינטרנט. אמור בקצרה שאינך יכול לבדוק מידע עדכני כרגע, וענה כמיטב ידיעתך אם אפשר. אל תענה במילה SEARCH.\n\n' + nowText(),
+          BASE + '\nכרגע אין לך גישה לאינטרנט. אמור בקצרה שאינך יכול לבדוק מידע עדכני כרגע, וענה כמיטב ידיעתך אם אפשר. אל תענה במילה SEARCH.\n\n' + nowText(),
           convo
         ));
       }
@@ -205,7 +210,7 @@ async function handle(request) {
     ]);
     return reply(`id_list_message=${answerMsg}&` + recordRead(nextMsg, n + 1));
   } catch (err) {
-    console.error('שגיאה:', err);
+    logError('ai-call', err);
     return reply(recordRead(await say('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', { cache: true }), n + 1));
   }
 }

@@ -1,6 +1,7 @@
 // שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה בקול טבעי, ואפשר להקיש מספר ידיעה בכל רגע.
 import { getBulletin } from '../../../lib/news.js';
 import { say } from '../../../lib/voice.js';
+import { logError } from '../../../lib/store.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -48,7 +49,7 @@ async function handle(request) {
   try {
     bulletin = await getBulletin();
   } catch (err) {
-    console.error('חדשות:', err);
+    logError('news', err);
     return reply(`id_list_message=${await say('סליחה, לא ניתן לטעון את החדשות כרגע. נסו שוב בעוד כמה דקות', { cache: true })}&go_to_folder=/`);
   }
   const items = bulletin.items;
