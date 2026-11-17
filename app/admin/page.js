@@ -565,6 +565,7 @@ function BotSettings({ api, notify }) {
   if (err) return <><Head title="הגדרות הבוט" /><div className="card glass"><Empty text={err} /></div></>;
   if (!s) return <><Head title="הגדרות הבוט" /><Loading /></>;
   const voices = [
+    ['google', 'גוגל (Google Translate) — גיבוי: אברי'],
     ['he-IL-AvriNeural', 'אברי — גבר'],
     ['he-IL-HilaNeural', 'הילה — אישה'],
   ];
@@ -595,27 +596,29 @@ function BotSettings({ api, notify }) {
               {voices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
-          <VoicePreview api={api} notify={notify} />
+          <VoicePreview api={api} notify={notify} voice={s["voice.name"]} />
         </div>
       </div>
     </>
   );
 }
-function VoicePreview({ api, notify }) {
-  const [t, setT] = useState('שלום, הגעתם לקו פתוח');
+function VoicePreview({ api, notify, voice }) {
+  const [t, setT] = useState('ברוכים הבאים להצבעה של המוכשר, תוכנית הכישרונות של הישיבה');
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
-    try { const r = await api('voice/preview', { method: 'POST', body: { text: t } });
-      notify(r.ref?.startsWith('f-') ? 'נוצר קובץ קול בהצלחה ✓' : 'נוצר (קול ימות — השירות החיצוני לא זמין)'); }
-    catch (e) { notify(e.message, 'err'); }
+    try {
+      const r = await api('voice/preview', { method: 'POST', body: { text: t, voice } });
+      new Audio('data:audio/mpeg;base64,' + r.audio).play().catch(() => {});
+      if (r.engine === 'fallback') notify('גוגל לא זמין כרגע — מושמע קול הגיבוי (אברי)', 'err');
+    } catch (e) { notify(e.message, 'err'); }
     setBusy(false);
   };
   return (
     <label className="fld" style={{ marginBottom: 0 }}><span className="lb">בדיקת קול</span>
       <div style={{ display: 'flex', gap: 8 }}>
         <input className="inp" value={t} onChange={(e) => setT(e.target.value)} />
-        <button className="btn ghost sm" onClick={go} disabled={busy} style={{ whiteSpace: 'nowrap' }}>{busy ? <span className="spin" /> : 'בדוק'}</button>
+        <button className="btn ghost sm" onClick={go} disabled={busy} style={{ whiteSpace: 'nowrap' }}>{busy ? <span className="spin" /> : '▶ השמע'}</button>
       </div>
     </label>
   );
@@ -766,15 +769,22 @@ function Voting({ api, notify }) {
   const saveCands = async () => {
     try { await api('voting/candidates', { method: 'POST', body: { candidates: cands.filter((c) => c.name.trim()) } });
       await api('voting/title', { method: 'POST', body: { title } });
-      notify('המועמדים נשמרו'); reload(); } catch (e) { notify(e.message, 'err'); }
+      notify('המתמודדים נשמרו'); reload(); } catch (e) { notify(e.message, 'err'); }
   };
   const toggle = async () => {
     try { await api('voting/open', { method: 'POST', body: { open: !d.config.is_open } }); notify(d.config.is_open ? 'ההצבעה נסגרה' : 'ההצבעה נפתחה'); reload(); }
     catch (e) { notify(e.message, 'err'); }
   };
-  const reset = async () => {
-    if (!confirm('לאפס את כל הקולות ולהתחיל סבב חדש?')) return;
-    try { await api('voting/reset', { method: 'POST' }); notify('הקולות אופסו'); reload(); } catch (e) { notify(e.message, 'err'); }
+  const reset = async (all) => {
+    const q = all
+      ? 'איפוס מלא: למחוק את כל הקולות וגם את כל שמות המתמודדים?'
+      : 'לאפס את הקולות בלבד? שמות המתמודדים יישארו.';
+    if (!confirm(q)) return;
+    try {
+      await api('voting/reset', { method: 'POST', body: { all: !!all } });
+      notify(all ? 'בוצע איפוס מלא' : 'הקולות אופסו');
+      reload();
+    } catch (e) { notify(e.message, 'err'); }
   };
   const addRow = () => setCands((p) => p.length >= 30 ? p : [...p, { num: p.length + 1, name: '' }]);
 
@@ -785,7 +795,7 @@ function Voting({ api, notify }) {
 
   return (
     <>
-      <Head title="מערכת הצבעה" sub="עד 30 מועמדים · הצבעה אחת לכל מתקשר"
+      <Head title="הצבעה · המוכשר" sub="תוכנית הכישרונות של הישיבה · עד 30 מתמודדים · קול אחד לכל מתקשר"
         right={<div style={{ display: 'flex', gap: 8 }}>
           <span className="live" style={{ background: d.config.is_open ? 'rgba(46,230,168,.12)' : 'var(--panel)' }}>
             <span className="dot" style={{ background: d.config.is_open ? 'var(--ok)' : 'var(--muted2)', animation: d.config.is_open ? '' : 'none' }} />
@@ -807,11 +817,14 @@ function Voting({ api, notify }) {
               ))}
             </div>
           )}
-          <button className="btn danger sm" style={{ marginTop: 14 }} onClick={reset}>אפס קולות</button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+            <button className="btn ghost sm" onClick={() => reset(false)}>איפוס קולות בלבד</button>
+            <button className="btn danger sm" onClick={() => reset(true)}>איפוס מלא (כולל שמות)</button>
+          </div>
         </div>
         {/* מועמדים */}
         <div className="card glass">
-          <div className="ch"><div><h3>מועמדים והגדרות</h3><p>{cands.filter((c) => c.name.trim()).length} מוגדרים</p></div>
+          <div className="ch"><div><h3>מתמודדים והגדרות</h3><p>{cands.filter((c) => c.name.trim()).length} מוגדרים</p></div>
             <button className="btn sm" onClick={saveCands}>שמור</button></div>
           <label className="fld"><span className="lb">כותרת ההצבעה</span>
             <input className="inp" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="למשל: הצבעה לוועד" /></label>
@@ -819,12 +832,12 @@ function Voting({ api, notify }) {
             {cands.map((c, i) => (
               <div className="cand" key={c.num}>
                 <div className="num">{c.num}</div>
-                <input className="inp" style={{ padding: '9px 12px' }} value={c.name} placeholder={`מועמד ${c.num}`}
+                <input className="inp" style={{ padding: '9px 12px' }} value={c.name} placeholder={`מתמודד ${c.num}`}
                   onChange={(e) => setCands((p) => p.map((x) => x.num === c.num ? { ...x, name: e.target.value } : x))} />
               </div>
             ))}
           </div>
-          {cands.length < 30 && <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={addRow}>+ הוסף מועמד</button>}
+          {cands.length < 30 && <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={addRow}>+ הוסף מתמודד</button>}
         </div>
       </div>
     </>

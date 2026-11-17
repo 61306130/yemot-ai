@@ -9,9 +9,9 @@ import { getSettings, setSettings, logError } from '../../../lib/store.js';
 import { runPodcast } from '../../../lib/podcast.js';
 import { getBulletin } from '../../../lib/news.js';
 import {
-  getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, getResults,
+  getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, resetAll, getResults,
 } from '../../../lib/voting.js';
-import { say, speakToPath } from '../../../lib/voice.js';
+import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -132,15 +132,18 @@ async function handle(request, ctx) {
       return json({ ok: true, config: await getConfig() });
     }
     if (path === 'voting/reset' && method === 'POST') {
-      await resetVotes();
+      const { all } = await body(request).catch(() => ({}));
+      if (all) await resetAll();
+      else await resetVotes();
       return json({ ok: true });
     }
 
     // ----- תצוגה מקדימה של קול -----
     if (path === 'voice/preview' && method === 'POST') {
-      const { text } = await body(request);
-      const ref = await say(String(text || 'שלום, זאת דוגמה לקול').slice(0, 200), { name: `preview-${Date.now() % 1000}` });
-      return json({ ok: true, ref });
+      const { text, voice } = await body(request);
+      const s = await getSettings();
+      const r = await previewVoice(String(text || 'שלום, זאת דוגמה לקול').slice(0, 300), voice || s['voice.name']);
+      return json({ ok: true, engine: r.engine, error: r.error, audio: r.audio.toString('base64') });
     }
 
     return json({ ok: false, error: 'נתיב לא נמצא' }, 404);

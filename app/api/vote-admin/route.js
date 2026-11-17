@@ -13,7 +13,7 @@ const speak = (t, o = {}) => (VT ? say(t, { ...o, token: VT }) : Promise.resolve
 import { transcribe } from '../../../lib/ai.js';
 import { loadState, saveState, getSetting, logError } from '../../../lib/store.js';
 import {
-  getConfig, getCandidates, getResults, setOpen, resetVotes, setCandidate, MAX_CANDIDATES,
+  getConfig, getCandidates, getResults, setOpen, resetVotes, resetAll, setCandidate, MAX_CANDIDATES,
 } from '../../../lib/voting.js';
 
 export const dynamic = 'force-dynamic';
@@ -38,12 +38,13 @@ export async function POST(request) {
 }
 
 const MENU =
-  'תפריט ניהול ההצבעה. ' +
+  'תפריט הניהול של המוכשר. ' +
   'לשמיעת התוצאות, הקישו 1. ' +
   'לפתיחת ההצבעה, הקישו 2. ' +
   'לסגירת ההצבעה, הקישו 3. ' +
-  'להגדרת שם מועמד, הקישו 4. ' +
-  'לאיפוס כל הקולות, הקישו 5. ' +
+  'להגדרת שם של מתמודד, הקישו 4. ' +
+  'לאיפוס הקולות בלבד, כשהשמות נשארים, הקישו 5. ' +
+  'לאיפוס מלא של הקולות וגם של שמות המתמודדים, הקישו 6. ' +
   'לשמיעת התפריט שוב, הקישו 0.';
 
 async function handle(request) {
@@ -67,7 +68,14 @@ async function handle(request) {
     if (st.stage === 'pin') {
       if (!n) {
         await saveState(key, st);
-        return reply(digitsRead([await fixed('לניהול ההצבעה, הקישו את קוד הניהול, ובסיום סולמית')], next, { min: 1, max: 8, secWait: 10 }));
+        return reply(digitsRead([await fixed('ניהול ההצבעה של המוכשר. הקישו את קוד הניהול, ובסיום סולמית')], next, { min: 1, max: 8, secWait: 15 }));
+      }
+      if (input === 'None') {
+        // לא הקישו קוד - מבקשים שוב (עד 3 פעמים) לפני ניתוק
+        if (n < 3) {
+          return reply(digitsRead([await fixed('לא נקלט קוד. הקישו את קוד הניהול, ובסיום סולמית')], next, { min: 1, max: 8, secWait: 15 }));
+        }
+        return reply(`id_list_message=${await fixed('לא נקלט קוד. להתראות')}&go_to_folder=hangup`);
       }
       if (String(input) !== String(pin)) {
         return reply(`id_list_message=${await fixed('קוד שגוי')}&go_to_folder=hangup`);
@@ -86,11 +94,11 @@ async function handle(request) {
       }
       const num = Number(input);
       if (!(num >= 1 && num <= MAX_CANDIDATES)) {
-        return reply(digitsRead([await dyn(`מספר לא חוקי. הקישו מספר מועמד בין 1 ל-${MAX_CANDIDATES}, ובסיום סולמית`)], next, { min: 1, max: 2, secWait: 8 }));
+        return reply(digitsRead([await dyn(`מספר לא חוקי. הקישו מספר מתמודד בין 1 ל-${MAX_CANDIDATES}, ובסיום סולמית`)], next, { min: 1, max: 2, secWait: 15 }));
       }
       st = { stage: 'cand_rec', num };
       await saveState(key, st);
-      return reply(recordRead([await dyn(`אמרו את שם המועמד מספר ${num} אחרי הצליל, ובסיום הקישו סולמית. כדי למחוק את המועמד, הקישו סולמית בלי להקליט`)], next));
+      return reply(recordRead([await dyn(`אמרו את השם של מתמודד מספר ${num} אחרי הצליל, ובסיום הקישו סולמית. כדי למחוק את המתמודד, הקישו סולמית בלי להקליט`)], next));
     }
 
     // ---------- הגדרת שם מועמד: שלב הקלטה ----------
@@ -100,32 +108,37 @@ async function handle(request) {
         await setCandidate(num, ''); // מחיקה
         st = { stage: 'menu' };
         await saveState(key, st);
-        return reply(tapRead([await dyn(`מועמד מספר ${num} נמחק.`), await fixed(MENU)], next));
+        return reply(tapRead([await dyn(`מתמודד מספר ${num} נמחק.`), await fixed(MENU)], next));
       }
       let name = '';
       try {
         const audio = await downloadRecording(input, p.ApiExtension, VT || process.env.YEMOT_TOKEN);
-        const { text } = await transcribe(audio, 'שם של אדם בעברית');
+        const { text } = await transcribe(audio, 'שם פרטי ושם משפחה של בחור ישיבה, בעברית');
         name = (text || '').replace(/[.,]/g, '').trim();
       } catch (e) {
         logError('vote-admin:transcribe', e);
       }
       if (!name) {
-        return reply(recordRead([await dyn(VT ? 'לא הצלחתי להבין את השם. אמרו שוב את שם המועמד אחרי הצליל, ובסיום סולמית' : 'לא הצלחתי לקלוט את ההקלטה. אפשר להגדיר את שמות המועמדים באתר הניהול. או נסו לומר שוב את השם אחרי הצליל, ובסיום סולמית')], next));
+        return reply(recordRead([await dyn(VT ? 'לא הצלחתי להבין את השם. אמרו שוב את שם המתמודד אחרי הצליל, ובסיום סולמית' : 'לא הצלחתי לקלוט את ההקלטה. אפשר להגדיר את שמות המתמודדים באתר הניהול. או נסו לומר שוב את השם אחרי הצליל, ובסיום סולמית')], next));
       }
       await setCandidate(num, name);
       st = { stage: 'menu' };
       await saveState(key, st);
-      return reply(tapRead([await dyn(`מועמד מספר ${num} נקבע לשם ${name}.`), await fixed('להגדרת מועמד נוסף הקישו 4. לתפריט הקישו 0')], next));
+      return reply(tapRead([await dyn(`מתמודד מספר ${num}: ${name}.`), await fixed('להגדרת מתמודד נוסף הקישו 4. לתפריט הקישו 0')], next));
     }
 
     // ---------- אישור איפוס ----------
     if (st.stage === 'reset_confirm') {
       if (input === '1') {
-        await resetVotes();
+        const all = st.kind === 'all';
+        if (all) await resetAll();
+        else await resetVotes();
         st = { stage: 'menu' };
         await saveState(key, st);
-        return reply(tapRead([await fixed('כל הקולות אופסו, וההצבעה נסגרה. אפשר לפתוח אותה מחדש בעזרת מקש 2.'), await fixed(MENU)], next));
+        const msg = all
+          ? 'בוצע איפוס מלא. כל הקולות וכל שמות המתמודדים נמחקו, וההצבעה סגורה. להגדרת מתמודדים חדשים הקישו 4.'
+          : 'הקולות אופסו, ושמות המתמודדים נשארו. ההצבעה סגורה, ואפשר לפתוח אותה מחדש בעזרת מקש 2.';
+        return reply(tapRead([await fixed(msg), await fixed(MENU)], next));
       }
       st = { stage: 'menu' };
       await saveState(key, st);
@@ -137,17 +150,20 @@ async function handle(request) {
     if (choice === '1') {
       const { results, total, config } = await getResults();
       if (!total) {
-        return reply(tapRead([await dyn(`בהצבעה ${config.title} עדיין אין קולות.`), await fixed(MENU)], next));
+        return reply(tapRead([await dyn(`בהצבעה של ${config.title || 'המוכשר'} עדיין אין קולות.`), await fixed(MENU)], next));
       }
       const top = results.filter((r) => r.votes > 0);
-      let text = `${config.title ? `תוצאות ${config.title}` : "תוצאות ההצבעה"}. ${config.is_open ? "ההצבעה עדיין פתוחה. " : ""}סך הכל ${votesWord(total)}. `;
-      text += `המוביל הוא ${results[0].name}, עם ${votesWord(results[0].votes)}. `;
+      const tie = results.length > 1 && results[1].votes === results[0].votes;
+      let text = `תוצאות ${config.title || 'המוכשר'}. ${config.is_open ? 'ההצבעה עדיין פתוחה. ' : 'ההצבעה סגורה. '}סך הכל ${votesWord(total)}. `;
+      text += tie
+        ? `יש תיקו במקום הראשון, עם ${votesWord(results[0].votes)} לכל אחד. `
+        : `${config.is_open ? 'מוביל כרגע' : 'המוכשר הוא'} ${results[0].name}, עם ${votesWord(results[0].votes)}! `;
       text += 'הפירוט: ' + top.map((r) => `${r.name}, ${votesWord(r.votes)}`).join('. ') + '.';
       return reply(tapRead([await dyn(text), await fixed(MENU)], next));
     }
     if (choice === '2') {
       await setOpen(true);
-      return reply(tapRead([await fixed('ההצבעה נפתחה. מעכשיו אפשר להצביע.'), await fixed(MENU)], next));
+      return reply(tapRead([await fixed('ההצבעה נפתחה! מעכשיו כל מי שמתקשר יכול להצביע.'), await fixed(MENU)], next));
     }
     if (choice === '3') {
       await setOpen(false);
@@ -157,13 +173,18 @@ async function handle(request) {
       st = { stage: 'cand_num' };
       await saveState(key, st);
       const cands = await getCandidates();
-      const have = cands.length ? `מוגדרים כרגע ${cands.length} מועמדים. ` : '';
-      return reply(digitsRead([await dyn(`${have}הקישו את מספר המועמד שתרצו להגדיר, בין 1 ל-${MAX_CANDIDATES}, ובסיום סולמית`)], next, { min: 1, max: 2, secWait: 8 }));
+      const have = cands.length ? `מוגדרים כרגע ${cands.length} מתמודדים. ` : 'עדיין אין מתמודדים. ';
+      return reply(digitsRead([await dyn(`${have}הקישו את מספר המתמודד שתרצו להגדיר, בין 1 ל-${MAX_CANDIDATES}, ובסיום סולמית`)], next, { min: 1, max: 2, secWait: 15 }));
     }
     if (choice === '5') {
-      st = { stage: 'reset_confirm' };
+      st = { stage: 'reset_confirm', kind: 'votes' };
       await saveState(key, st);
-      return reply(tapRead([await fixed('לאיפוס כל הקולות ופתיחת סבב חדש, הקישו 1. לביטול, הקישו כוכבית או המתינו')], next, 6));
+      return reply(tapRead([await fixed('איפוס הקולות בלבד. כל הקולות יימחקו, ושמות המתמודדים יישארו. לאישור הקישו 1. לביטול, הקישו כוכבית או המתינו')], next, 6));
+    }
+    if (choice === '6') {
+      st = { stage: 'reset_confirm', kind: 'all' };
+      await saveState(key, st);
+      return reply(tapRead([await fixed('איפוס מלא. כל הקולות וגם כל שמות המתמודדים יימחקו. לאישור הקישו 1. לביטול, הקישו כוכבית או המתינו')], next, 6));
     }
     // 0 או כל דבר אחר - התפריט שוב
     return reply(tapRead([await fixed(MENU)], next));
