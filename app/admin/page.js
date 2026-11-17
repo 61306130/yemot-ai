@@ -558,6 +558,7 @@ function BotSettings({ api, notify }) {
       await api('settings', { method: 'POST', body: {
         'bot.greeting': s['bot.greeting'], 'bot.prompt': s['bot.prompt'], 'bot.search': s['bot.search'],
         'voice.name': s['voice.name'], 'voice.enabled': s['voice.enabled'],
+        'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'],
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -588,6 +589,10 @@ function BotSettings({ api, notify }) {
             <button className={`sw ${s['bot.search'] ? 'on' : ''}`} onClick={() => up('bot.search', !s['bot.search'])} />
           </div>
           <div className="swrow">
+            <div className="tx"><b>ניקוד בתשובות</b><span>ה-AI מנקד מילים שעלולות להיקרא לא נכון</span></div>
+            <button className={`sw ${s['bot.niqqud'] ? 'on' : ''}`} onClick={() => up('bot.niqqud', !s['bot.niqqud'])} />
+          </div>
+          <div className="swrow">
             <div className="tx"><b>קול טבעי</b><span>הקראה בקול אנושי במקום הקול של ימות</span></div>
             <button className={`sw ${s['voice.enabled'] ? 'on' : ''}`} onClick={() => up('voice.enabled', !s['voice.enabled'])} />
           </div>
@@ -596,19 +601,23 @@ function BotSettings({ api, notify }) {
               {voices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
-          <VoicePreview api={api} notify={notify} voice={s["voice.name"]} />
+          <label className="fld"><span className="lb">מהירות דיבור: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
+            <input type="range" min="-20" max="50" step="5" value={Number(s['voice.rate']) || 0}
+              onChange={(e) => up('voice.rate', Number(e.target.value))} style={{ width: '100%', accentColor: '#7c5cff' }} />
+          </label>
+          <VoicePreview api={api} notify={notify} voice={s["voice.name"]} rate={Number(s['voice.rate']) || 0} />
         </div>
       </div>
     </>
   );
 }
-function VoicePreview({ api, notify, voice }) {
+function VoicePreview({ api, notify, voice, rate }) {
   const [t, setT] = useState('ברוכים הבאים להצבעה של המוכשר, תוכנית הכישרונות של הישיבה');
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
     try {
-      const r = await api('voice/preview', { method: 'POST', body: { text: t, voice } });
+      const r = await api('voice/preview', { method: 'POST', body: { text: t, voice, rate } });
       new Audio('data:audio/mpeg;base64,' + r.audio).play().catch(() => {});
       if (r.engine === 'fallback') notify('גוגל לא זמין כרגע — מושמע קול הגיבוי (אברי)', 'err');
     } catch (e) { notify(e.message, 'err'); }

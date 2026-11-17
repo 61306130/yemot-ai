@@ -172,7 +172,11 @@ async function handle(request) {
     }
     const convo = [...history, { role: 'user', text: transcript }];
     const st = await getSettings().catch(() => ({}));
-    const BASE = SYSTEM_PROMPT + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
+    const NIQQUD =
+      st['bot.niqqud'] !== false
+        ? '\n- התשובה מוקראת על ידי מנוע הקראה שמתבלבל במילים בלי ניקוד. הוסף ניקוד מלא ומדויק למילים שאפשר לקרוא ביותר מדרך אחת, לשמות של אנשים ומקומות ולמילים לועזיות. מילים ברורות השאר בלי ניקוד.'
+        : '';
+    const BASE = SYSTEM_PROMPT + NIQQUD + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
     const searchOn = st['bot.search'] !== false;
     let { text: answer, provider: aiBy } = await aiAnswer(
       BASE + (searchOn ? '\n' + SEARCH_RULE : '') + '\n\n' + nowText(),

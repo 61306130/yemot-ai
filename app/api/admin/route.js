@@ -140,9 +140,9 @@ async function handle(request, ctx) {
 
     // ----- תצוגה מקדימה של קול -----
     if (path === 'voice/preview' && method === 'POST') {
-      const { text, voice } = await body(request);
+      const { text, voice, rate } = await body(request);
       const s = await getSettings();
-      const r = await previewVoice(String(text || 'שלום, זאת דוגמה לקול').slice(0, 300), voice || s['voice.name']);
+      const r = await previewVoice(String(text || 'שלום, זאת דוגמה לקול').slice(0, 300), voice || s['voice.name'], rate ?? s['voice.rate'] ?? 0);
       return json({ ok: true, engine: r.engine, error: r.error, audio: r.audio.toString('base64') });
     }
 
