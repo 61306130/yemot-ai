@@ -603,7 +603,7 @@ function BotSettings({ api, notify }) {
             </select>
           </label>
           <label className="fld"><span className="lb">מקסימום שאלות לכל מתקשר ביום (0 = בלי הגבלה)</span>
-            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 20} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
+            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 40} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
           </label>
           <label className="fld"><span className="lb">מהירות דיבור: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
             <input type="range" min="-20" max="50" step="5" value={Number(s['voice.rate']) || 0}
