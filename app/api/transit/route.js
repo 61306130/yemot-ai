@@ -1,3 +1,4 @@
+import { resolveSystem, enterSystem } from '../../../lib/systems.js';
 // שלוחת תחבורה ציבורית (4): אומרים מאיפה לאיפה, בוחרים מסלול, והמערכת מלווה שלב אחר שלב.
 // הנסיעה נשמרת לפי מספר הטלפון - אפשר לנתק ולחזור באמצע עד שסוגרים אותה.
 import { reply, readParams, tapRead, recordRead, downloadRecording } from '../../../lib/yemot.js';
@@ -26,6 +27,10 @@ export async function POST(request) {
 
 async function handle(request) {
   const p = await readParams(request);
+  // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
+  const sys = await resolveSystem(p).catch(() => ({}));
+  if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
+  enterSystem(sys);
   if (p.hangup === 'yes') return reply('', 'תחבורה');
   const callId = p.ApiCallId || 'x';
   const phone = /^\d{5,}$/.test(p.ApiPhone || '') ? p.ApiPhone : `hidden-${callId}`;

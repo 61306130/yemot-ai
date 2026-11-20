@@ -283,12 +283,13 @@ const TABS = [
   ['overview', 'סקירה', I.grid],
   ['calls', 'שיחות', I.phone],
   ['callers', 'מתקשרים', I.users],
-  ['bot', 'הגדרות הבוט', I.bot],
+  ['bot', 'בוט AI', I.bot],
   ['menu', 'תפריט ראשי', I.menu],
   ['news', 'חדשות', I.news],
   ['podcast', 'פודקאסט', I.mic],
   ['transit', 'תחבורה', I.route],
   ['voting', 'הצבעה', I.vote],
+  ['systems', 'מערכות', I.grid],
   ['system', 'מערכת', I.pulse],
 ];
 
@@ -306,7 +307,7 @@ function Dash({ onLogout }) {
     api('overview').then((d) => setErrCount(d?.totals?.errors24h || 0)).catch(() => {});
   }, [api]);
 
-  const Section = { overview: Overview, calls: Calls, callers: Callers, bot: BotSettings,
+  const Section = { overview: Overview, calls: Calls, callers: Callers, bot: BotTab, systems: Systems,
     menu: MenuTab, news: NewsTab, podcast: Podcast, transit: Transit, voting: Voting, system: System }[tab];
 
   return (
@@ -548,6 +549,182 @@ function CallerRow({ c, onSave }) {
 }
 
 /* ============================ הגדרות הבוט ============================ */
+/* ============================ מערכות של משתמשים ============================ */
+function Systems({ api, notify }) {
+  const [d, reload, err] = useLoad(() => api('systems'), [api]);
+  const [show, setShow] = useState({});
+  const [q, setQ] = useState('');
+  const act = async (path, body, msg) => {
+    try { await api(path, { method: 'POST', body }); notify(msg); reload(); } catch (e) { notify(e.message, 'err'); }
+  };
+  const list = (d?.systems || []).filter((x) => !q || `${x.did} ${x.owner_name} ${x.owner_phone}`.includes(q.trim()));
+  const active = (x) => x.status === 'active' && x.last_seen && Date.now() - new Date(x.last_seen) < 7 * 864e5;
+  return (
+    <>
+      <Head title="מערכות של משתמשים" sub="מערכות שהוקמו דרך שלוחת פתיחת המערכת" right={<button className="btn ghost sm" onClick={reload}>רענון</button>} />
+      <div className="card glass">
+        <input className="inp" style={{ marginBottom: 14 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי מספר מערכת, שם או טלפון" />
+        {err ? <Empty text={err} /> : !d ? <Loading /> : !list.length ? <Empty icon="🏗️" text="עוד לא הוקמו מערכות" /> : (
+          <div className="rows">
+            {list.map((x) => (
+              <div className="row" key={x.did} style={{ alignItems: 'flex-start' }}>
+                <div className="av">{x.status === 'active' ? '✓' : '⏸'}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="nm">{x.did} {x.status !== 'active' ? <span className="tag bad">מושבתת</span> : active(x) ? <span className="tag">פעילה</span> : <span className="tag" style={{ opacity: 0.6 }}>לא פעילה השבוע</span>}</div>
+                  <div className="mt">
+                    בעלים: {x.owner_name || 'ללא שם'} · {x.owner_phone ? fmtPhone(x.owner_phone) : 'מספר חסוי'} ·
+                    סיסמה: <span style={{ fontFamily: 'monospace' }}>{show[x.did] ? x.password : '••••'}</span>{' '}
+                    <a style={{ cursor: 'pointer', color: '#19d3ff' }} onClick={() => setShow((s) => ({ ...s, [x.did]: !s[x.did] }))}>{show[x.did] ? 'הסתר' : 'הצג'}</a>
+                  </div>
+                  <div className="mt">הוקמה {new Date(x.created_at).toLocaleDateString('he-IL')} · {x.calls} שיחות · {x.last_seen ? `שימוש אחרון ${timeAgo(x.last_seen)}` : 'עוד לא היו שיחות'}</div>
+                  {x.last_error && <div className="mt" style={{ color: '#ff6b8b' }}>שגיאה בהקמה: {x.last_error}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button className="btn ghost sm" onClick={() => act('systems/status', { did: x.did, status: x.status === 'active' ? 'disabled' : 'active' }, x.status === 'active' ? 'המערכת הושבתה' : 'המערכת הופעלה')}>
+                    {x.status === 'active' ? 'השבתה' : 'הפעלה'}
+                  </button>
+                  <button className="btn danger sm" onClick={() => confirm(`למחוק את המערכת ${x.did} מהרשימה? השלוחות שלה יפסיקו לעבוד.`) && act('systems/delete', { did: x.did }, 'המערכת נמחקה')}>מחיקה</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ============================ בוט AI: משתמשים + הגדרות ============================ */
+function BotTab(props) {
+  const [sub, setSub] = useState('users');
+  return (
+    <>
+      <div className="seg" style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {[['users', 'משתמשים'], ['settings', 'הגדרות']].map(([k, l]) => (
+          <button key={k} className={`btn sm ${sub === k ? '' : 'ghost'}`} onClick={() => setSub(k)}>{l}</button>
+        ))}
+      </div>
+      {sub === 'users' ? <BotUsers {...props} /> : <BotSettings {...props} />}
+    </>
+  );
+}
+
+const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+function MiniBars({ data, labels, every = 1 }) {
+  const max = Math.max(1, ...data);
+  return (
+    <div>
+      <div className="bars" style={{ height: 110 }}>
+        {data.map((v, i) => (
+          <div key={i} className="b" style={{ height: `${Math.max(3, (v / max) * 100)}%`, opacity: v ? 0.9 : 0.25 }}>
+            <span className="t">{labels[i]}: {v}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 7, marginTop: 6 }}>
+        {labels.map((l, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: 'var(--muted)' }}>{i % every === 0 ? l : ''}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BotUsers({ api, notify }) {
+  const [q, setQ] = useState('');
+  const [list, setList] = useState(null);
+  const [sel, setSel] = useState(null);
+  const [prof, setProf] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [msgs, setMsgs] = useState(null);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try { setList((await api(`users?q=${encodeURIComponent(q)}`)).users); } catch (e) { notify(e.message, 'err'); setList([]); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, api]);
+  const pick = async (phone) => {
+    setSel(phone); setProf(null); setOpen(null);
+    try { setProf((await api(`users?phone=${encodeURIComponent(phone)}`)).profile); } catch (e) { notify(e.message, 'err'); }
+  };
+  const expand = async (id) => {
+    if (open === id) { setOpen(null); return; }
+    setOpen(id); setMsgs(null);
+    try { setMsgs((await api(`calls?id=${encodeURIComponent(id)}`)).messages); } catch { setMsgs([]); }
+  };
+  const rename = async () => {
+    const name = prompt('שם המשתמש:', prof?.caller?.name || '');
+    if (name == null) return;
+    try { await api('callers', { method: 'POST', body: { phone: sel, name } }); notify('השם עודכן'); pick(sel); } catch (e) { notify(e.message, 'err'); }
+  };
+  const c = prof?.caller;
+  const peak = prof ? prof.byHour.indexOf(Math.max(...prof.byHour)) : -1;
+  return (
+    <>
+      <Head title="משתמשי הבוט" sub="שלוחה 1 · חיפוש לפי שם או מספר טלפון" />
+      <div className="grid cols wide">
+        <div className="card glass">
+          {sel && prof === null ? <Loading /> : !sel ? <Empty icon="🔎" text="בחרו משתמש מהרשימה כדי לראות את הנתונים שלו" /> : !c ? <Empty text="המשתמש לא נמצא" /> : (
+            <>
+              <div className="ch">
+                <div><h3>{c.name || 'ללא שם'} {c.blocked && <span className="tag bad">חסום</span>}</h3><p>{fmtPhone(c.phone)}</p></div>
+                <button className="btn ghost sm" onClick={rename}>עריכת שם</button>
+              </div>
+              <div className="grid stats" style={{ marginBottom: 16, gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))" }}>
+                <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 24 }}>{c.calls_count}</div><div className="l">שיחות</div></div>
+                <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 24 }}>{prof.questions}</div><div className="l">שאלות</div></div>
+                <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{new Date(c.first_call_at).toLocaleDateString('he-IL')}</div><div className="l">שיחה ראשונה</div></div>
+                <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{timeAgo(c.last_call_at)}</div><div className="l">שיחה אחרונה</div></div>
+              </div>
+              <h4 style={{ margin: '6px 0 4px' }}>באילו שעות הוא מתקשר {peak >= 0 && prof.byHour[peak] > 0 && <span className="mt">· הכי הרבה בשעה {peak}:00</span>}</h4>
+              <MiniBars data={prof.byHour} labels={prof.byHour.map((_, i) => String(i))} every={3} />
+              <h4 style={{ margin: '18px 0 4px' }}>באילו ימים</h4>
+              <MiniBars data={prof.byDay} labels={DAYS} />
+              <h4 style={{ margin: '18px 0 8px' }}>השיחות שלו</h4>
+              <div className="rows">
+                {prof.calls.map((x) => (
+                  <div key={x.id}>
+                    <div className="row" style={{ cursor: 'pointer' }} onClick={() => expand(x.id)}>
+                      <div className="av">📞</div>
+                      <div><div className="nm">{new Date(x.started_at).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                        <div className="mt">{new Date(x.started_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })} · {x.turns} הודעות</div></div>
+                      <div className="end">{timeAgo(x.started_at)}</div>
+                    </div>
+                    {open === x.id && (
+                      <div style={{ padding: '10px 14px 16px' }}>
+                        {!msgs ? <Loading /> : !msgs.length ? <Empty text="אין תמלול לשיחה הזו" /> :
+                          msgs.map((m, i) => (
+                            <div className={`bub ${m.role === 'user' ? 'u' : 'a'}`} key={i}>
+                              <div className="who">{m.role === 'user' ? (c.name || 'מתקשר') : 'בוט'}</div>{m.text}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="card glass">
+          <input className="inp" style={{ marginBottom: 14 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או מספר טלפון" />
+          {!list ? <Loading /> : !list.length ? <Empty icon="👤" text="לא נמצאו משתמשים" /> : (
+            <div className="rows">
+              {list.map((u) => (
+                <div key={u.phone} className="row" style={{ cursor: 'pointer', outline: sel === u.phone ? '1px solid rgba(124,92,255,.6)' : 'none' }} onClick={() => pick(u.phone)}>
+                  <div className="av">{initials(u.name) || '•'}</div>
+                  <div><div className="nm">{who(u)}</div><div className="mt">{whoSub(u)} · {u.calls_count} שיחות · {u.questions} שאלות</div></div>
+                  <div className="end">{timeAgo(u.last_call_at)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function BotSettings({ api, notify }) {
   const [d, reload, err] = useLoad(() => api('settings'), [api]);
   const [s, setS] = useState(null);
@@ -616,7 +793,7 @@ function BotSettings({ api, notify }) {
   );
 }
 function VoicePreview({ api, notify, voice, rate }) {
-  const [t, setT] = useState('ברוכים הבאים להצבעה של המוכשר, תוכנית הכישרונות של הישיבה');
+  const [t, setT] = useState('שלום, כאן העוזר החכם. אפשר לשאול אותי כל שאלה, ואני אשתדל לעזור.');
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
@@ -858,7 +1035,7 @@ function Voting({ api, notify }) {
 }
 
 /* ============================ מערכת ============================ */
-const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי', translate: 'תרגומון' };
+const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי', translate: 'תרגומון', setup: 'פתיחת מערכת' };
 function System({ api, notify }) {
   const [e, reloadE, errE] = useLoad(() => api('errors'), [api]);
   const [u, reloadU] = useLoad(() => api('usage'), [api]);

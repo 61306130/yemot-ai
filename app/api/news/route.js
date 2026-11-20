@@ -1,3 +1,4 @@
+import { resolveSystem, enterSystem } from '../../../lib/systems.js';
 // שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה בקול טבעי, ואפשר להקיש מספר ידיעה בכל רגע.
 import { getBulletin } from '../../../lib/news.js';
 import { say } from '../../../lib/voice.js';
@@ -31,6 +32,10 @@ async function handle(request) {
     } catch {}
   }
   if (p.hangup === 'yes') return reply('');
+  // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
+  const sys = await resolveSystem(p).catch(() => ({}));
+  if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
+  enterSystem(sys);
 
   const sels = Object.keys(p)
     .filter((k) => /^sel\d+$/.test(k))

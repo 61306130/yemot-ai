@@ -3,8 +3,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   overview, recentCalls, callMessages, listCallers, updateCaller,
-  recentErrors, clearErrors, usageToday, podcastHistory,
-} from '../../../lib/admin.js';
+  recentErrors, clearErrors, usageToday, podcastHistory, searchCallers, callerProfile } from '../../../lib/admin.js';
 import { getSettings, setSettings, logError } from '../../../lib/store.js';
 import { runPodcast } from '../../../lib/podcast.js';
 import { getBulletin } from '../../../lib/news.js';
@@ -14,6 +13,7 @@ import {
 import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
 import { geminiKeyCount } from '../../../lib/ai.js';
+import { listSystems, setSystemStatus, deleteSystem } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -59,6 +59,22 @@ async function handle(request, ctx) {
   try {
     // ----- נתונים -----
     if (path === 'overview') return json(await overview());
+    if (path === 'systems' && method === 'GET') return json({ systems: await listSystems() });
+    if (path === 'systems/status' && method === 'POST') {
+      const { did, status } = await body(request);
+      await setSystemStatus(String(did), status);
+      return json({ ok: true });
+    }
+    if (path === 'systems/delete' && method === 'POST') {
+      await deleteSystem(String((await body(request)).did));
+      return json({ ok: true });
+    }
+    if (path === 'users' && method === 'GET') {
+      const u = new URL(request.url);
+      const phone = u.searchParams.get('phone');
+      if (phone) return json({ profile: await callerProfile(phone) });
+      return json({ users: await searchCallers(u.searchParams.get('q') || '') });
+    }
     if (path === 'calls') {
       const u = new URL(request.url);
       const id = u.searchParams.get('id');

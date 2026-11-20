@@ -5,7 +5,57 @@
 import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
 import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 import { say, callFileName } from '../../../lib/voice.js';
-import { getSettings, logError } from '../../../lib/store.js';
+import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
+import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
+import { resolveSystem, enterSystem, currentToken } from '../../../lib/systems.js';
+
+// ניקוי שם שהמתקשר אמר ("שמי ישראל כהן" -> "ישראל כהן")
+function cleanName(t) {
+  return String(t || '')
+    .replace(/[.,!?"'״׳:;()\-]/g, ' ')
+    .replace(/^\s*(שלום|היי)?\s*(השם שלי( הוא)?|שמי|קוראים לי|אני|זה)\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .slice(0, 4)
+    .join(' ');
+}
+
+// רישום שם בשיחה הראשונה: הקלטה -> תמלול -> אישור -> שמירה. מחזיר תשובה לימות, או null כשסיימנו
+async function nameFlow(p, callId, phone) {
+  const a = Object.keys(p).filter((k) => /^nm\d+$/.test(k)).length;
+  const b = Object.keys(p).filter((k) => /^nc\d+$/.test(k)).length;
+  const key = `name-${callId}`;
+  const st = (await loadState(key)) || { stage: 'name', tries: 0 };
+  const askName = async (text) => {
+    await saveState(key, { ...st, stage: 'name', tries: (st.tries || 0) + 1 });
+    return reply(recordAs([await say(text, { cache: true })], `nm${a + 1}`));
+  };
+  const start = async (greeting) => reply(recordRead(await say(greeting, { cache: true }), 1));
+
+  if (st.stage === 'name') {
+    if ((st.tries || 0) >= 4) return start('בסדר, נמשיך בלי שם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית');
+    let name = '';
+    try {
+      const audio = await downloadRecording(p[`nm${a}`], p.ApiExtension);
+      name = cleanName((await transcribe(audio, 'שם פרטי ושם משפחה בעברית')).text);
+    } catch (e) {
+      console.error('רישום שם:', String(e?.message || e).slice(0, 200));
+    }
+    if (!name) return askName('לא שמעתי. אמרו את השם הפרטי ושם המשפחה אחרי הצליל, ובסיום הקישו סולמית');
+    if (name.split(' ').length < 2) return askName('אנחנו צריכים גם שם משפחה. אמרו את השם הפרטי ושם המשפחה ביחד, אחרי הצליל, ובסיום הקישו סולמית');
+    await saveState(key, { ...st, stage: 'confirm', name });
+    return reply(tapRead([await say(`שמעתי: ${name}. אם זה נכון, הקישו 1. להקלטה מחדש, הקישו 2.`, { name: `nm-${callId}` })], `nc${b + 1}`, 10));
+  }
+  // אישור
+  const v = String(p[`nc${b}`] || '');
+  if (v === '1' && st.name) {
+    await sql`update callers set name = ${st.name} where phone = ${phone}`.catch((e) => console.error('שמירת שם:', e));
+    await saveState(key, { stage: 'done' });
+    return start(`נעים מאוד, ${st.name}! מעכשיו אזכור אותך. עכשיו אפשר לשאול אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית`);
+  }
+  return askName('בסדר, ננסה שוב. אמרו את השם הפרטי ושם המשפחה אחרי הצליל, ובסיום הקישו סולמית');
+}
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -109,7 +159,7 @@ async function downloadRecording(value, extension) {
 
   const url =
     'https://www.call2all.co.il/ym/api/DownloadFile?token=' +
-    encodeURIComponent(YEMOT_TOKEN) +
+    encodeURIComponent(currentToken() || YEMOT_TOKEN) +
     '&path=' +
     encodeURIComponent('ivr2:' + path);
   const res = await fetch(url);
@@ -131,6 +181,10 @@ async function handle(request) {
     } catch {}
   }
   console.log('פנייה מימות:', p);
+  // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
+  const sys = await resolveSystem(p).catch(() => ({}));
+  if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
+  enterSystem(sys);
 
   const callId = p.ApiCallId || 'unknown';
   // מזהים את המתקשר לפי מספר הטלפון (מספר חסוי - בלי זיכרון בין שיחות)
@@ -154,6 +208,16 @@ async function handle(request) {
     .sort((a, b) => a - b);
   const n = recs.length ? recs[recs.length - 1] : 0;
 
+  // רישום שם (שיחה ראשונה) - יש תשובות לשלב השם ועוד אין שאלות
+  if (n === 0 && hasDb && Object.keys(p).some((k) => /^(nm|nc)\d+$/.test(k))) {
+    try {
+      return await nameFlow(p, callId, phone);
+    } catch (e) {
+      logError('ai-call', e);
+      return reply(recordRead(await say('שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית', { cache: true }), 1));
+    }
+  }
+
   // כניסה לשלוחה: זיהוי המתקשר, הודעת פתיחה ובקשת הקלטה ראשונה
   if (n === 0) {
     const cfg = await getSettings().catch(() => ({}));
@@ -164,7 +228,19 @@ async function handle(request) {
         if (caller.blocked) {
           return reply('id_list_message=t-הגישה למערכת חסומה&go_to_folder=hangup');
         }
-        if (previousMessages > 0) {
+        // מתקשר בלי שם (בדרך כלל - פעם ראשונה) - קודם מבקשים שם פרטי ושם משפחה
+        if (!caller.name && !phone.startsWith('hidden')) {
+          await saveState(`name-${callId}`, { stage: 'name', tries: 1 });
+          return reply(
+            recordAs(
+              [await say('שלום וברוכים הבאים לעוזר החכם! לפני שנתחיל, נשמח להכיר. אמרו את השם הפרטי ושם המשפחה שלכם אחרי הצליל, ובסיום הקישו סולמית', { cache: true })],
+              'nm1'
+            )
+          );
+        }
+        if (previousMessages === 0 && caller.name) {
+          greeting = `שלום ${caller.name}! אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית`;
+        } else if (previousMessages > 0) {
           const name = caller.name ? ` ${caller.name}` : '';
           greeting = `שלום${name}, טוב לשמוע ממך שוב. אני זוכר על מה דיברנו. אפשר להמשיך מאיפה שעצרנו או לשאול משהו חדש. דבר אחרי הצליל ובסיום הקש סולמית`;
         }

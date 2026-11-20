@@ -7,6 +7,7 @@ import { reply, readParams, digitsRead, recordRead, downloadRecording } from '..
 import { say } from '../../../lib/voice.js';
 import { transcribeAny, answer } from '../../../lib/ai.js';
 import { loadState, saveState, logError } from '../../../lib/store.js';
+import { resolveSystem, enterSystem } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -38,6 +39,10 @@ function isHebrew(text) {
 
 async function handle(request) {
   const p = await readParams(request);
+  // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
+  const sys = await resolveSystem(p).catch(() => ({}));
+  if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
+  enterSystem(sys);
   if (p.hangup === 'yes') return reply('', 'תרגומון');
   const callId = p.ApiCallId || 'x';
   const key = `tr-${callId}`;
