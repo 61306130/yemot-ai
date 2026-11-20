@@ -2,7 +2,7 @@
 // המתקשר מדבר -> ימות מקליטה -> השרת מוריד את ההקלטה מימות ->
 // Gemini מבין את ההקלטה ועונה -> ימות מקריאה את התשובה -> חוזר חלילה.
 
-import { hasDb, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
+import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
 import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 import { say, callFileName } from '../../../lib/voice.js';
 import { getSettings, logError } from '../../../lib/store.js';
@@ -155,6 +155,16 @@ async function handle(request) {
   }
 
   try {
+    // מגבלת שאלות יומית לכל מתקשר - כדי שאדם אחד לא יגמור את המכסה לכולם
+    const limit = Number((await getSettings().catch(() => ({})))['bot.dailyLimit']) || 0;
+    if (limit > 0 && hasDb && !phone.startsWith('hidden')) {
+      const [{ n: today }] = await sql`select count(*)::int as n from messages
+        where phone = ${phone} and role = 'user' and created_at > date_trunc('day', now() at time zone 'Asia/Jerusalem') at time zone 'Asia/Jerusalem'`.catch(() => [{ n: 0 }]);
+      if (today >= limit) {
+        return reply(`id_list_message=${await say(`הגעת למספר השאלות המקסימלי להיום, ${limit} שאלות. אפשר לחזור ולשאול מחר. להתראות!`, { cache: true })}&go_to_folder=hangup`);
+      }
+    }
+
     const audio = await downloadRecording(p[`rec${n}`], p.ApiExtension);
 
     let history = memory.get(callId) || [];
@@ -214,6 +224,10 @@ async function handle(request) {
     ]);
     return reply(`id_list_message=${answerMsg}&` + recordRead(nextMsg, n + 1));
   } catch (err) {
+    if (err?.busy) {
+      logError('ai-busy', err);
+      return reply(`id_list_message=${await say('יש כרגע עומס גדול על העוזר החכם. נסו שוב בעוד כמה דקות. תודה על הסבלנות!', { cache: true })}&go_to_folder=/`);
+    }
     logError('ai-call', err);
     return reply(recordRead(await say('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', { cache: true }), n + 1));
   }

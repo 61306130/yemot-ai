@@ -12,6 +12,7 @@ import {
   getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, resetAll, getResults,
 } from '../../../lib/voting.js';
 import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
+import { runCleanup } from '../../../lib/cleanup.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -69,6 +70,8 @@ async function handle(request, ctx) {
       await updateCaller(phone, fields);
       return json({ ok: true });
     }
+    if (path === 'cleanup' && method === 'GET') return json({ last: (await getSettings())['cleanup.last'] || null });
+    if (path === 'cleanup/run' && method === 'POST') return json({ report: await runCleanup() });
     if (path === 'errors' && method === 'GET') return json({ errors: await recentErrors() });
     if (path === 'errors' && method === 'DELETE') {
       await clearErrors();

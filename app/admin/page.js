@@ -559,6 +559,7 @@ function BotSettings({ api, notify }) {
         'bot.greeting': s['bot.greeting'], 'bot.prompt': s['bot.prompt'], 'bot.search': s['bot.search'],
         'voice.name': s['voice.name'], 'voice.enabled': s['voice.enabled'],
         'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'],
+        'bot.dailyLimit': Math.max(0, Number(s['bot.dailyLimit']) || 0),
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -600,6 +601,9 @@ function BotSettings({ api, notify }) {
             <select className="inp" value={s['voice.name']} onChange={(e) => up('voice.name', e.target.value)}>
               {voices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+          </label>
+          <label className="fld"><span className="lb">מקסימום שאלות לכל מתקשר ביום (0 = בלי הגבלה)</span>
+            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 20} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
           </label>
           <label className="fld"><span className="lb">מהירות דיבור: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
             <input type="range" min="-20" max="50" step="5" value={Number(s['voice.rate']) || 0}
@@ -854,10 +858,17 @@ function Voting({ api, notify }) {
 }
 
 /* ============================ מערכת ============================ */
-const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'admin-api': 'אתר ניהול' };
+const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי' };
 function System({ api, notify }) {
   const [e, reloadE, errE] = useLoad(() => api('errors'), [api]);
   const [u, reloadU] = useLoad(() => api('usage'), [api]);
+  const [cl, reloadC] = useLoad(() => api('cleanup'), [api]);
+  const [cleaning, setCleaning] = useState(false);
+  const runClean = async () => {
+    setCleaning(true);
+    try { await api('cleanup/run', { method: 'POST' }); notify('הניקוי הסתיים'); reloadC(); } catch (ex) { notify(ex.message, 'err'); }
+    setCleaning(false);
+  };
   const clear = async () => {
     try { await api('errors', { method: 'DELETE' }); notify('היומן נוקה'); reloadE(); } catch (ex) { notify(ex.message, 'err'); }
   };
@@ -901,6 +912,21 @@ function System({ api, notify }) {
             </div>
           )}
         </div>
+      </div>
+      <div className="card glass" style={{ marginTop: 16 }}>
+        <div className="ch"><div><h3>ניקוי אוטומטי</h3>
+          <p>רץ כל לילה: קבצי קול ישנים בימות, ושמירת 30 השיחות האחרונות של כל מתקשר</p></div>
+          <button className="btn ghost sm" disabled={cleaning} onClick={runClean}>{cleaning ? <span className="spin" /> : 'הרץ עכשיו'}</button></div>
+        {!cl ? <Loading /> : !cl.last ? <Empty icon="🧹" text="הניקוי עוד לא רץ" /> : (
+          <div className="rows">
+            <div className="row"><div className="nm">ריצה אחרונה</div><div className="mt">{timeAgo(cl.last.at)} · {cl.last.seconds} שניות</div></div>
+            <div className="row"><div className="nm">תמלולים שנמחקו</div><div className="mt">{cl.last.db?.calls || 0} שיחות · {cl.last.db?.messages || 0} הודעות</div></div>
+            {(cl.last.yemot || []).map((y) => (
+              <div className="row" key={y.system}><div className="nm">קבצי קול · מערכת {y.system}</div>
+                <div className="mt">{y.error ? `שגיאה: ${y.error}` : `${y.deleted} נמחקו מתוך ${y.files}${y.left ? ` · ${y.left} יימחקו בריצה הבאה` : ''}`}</div></div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

@@ -75,7 +75,7 @@ async function handle(request) {
       if (mine) {
         return hangup(
           `שלום, כבר הצבעת ל${mine.name} בהצבעה של ${show}. אפשר להצביע רק פעם אחת. תודה שהשתתפת, ${bye}`,
-          { name: `vote-has-${callId}` }
+          { cache: true }
         );
       }
       st = { stage: 'choose', silent: 0 };
@@ -97,7 +97,7 @@ async function handle(request) {
       if (st.stage === 'choose') return askList([await speak('לא שמעתי בחירה. הנה הרשימה שוב.', { cache: true })]);
       if (st.stage === 'confirm') {
         const c = candidates.find((x) => x.num === st.num);
-        return askOne(`לא שמעתי. בחרת ב${c?.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { name: `vote-cf-${callId}` });
+        return askOne(`לא שמעתי. בחרת ב${c?.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { cache: true });
       }
     }
     st.silent = 0;
@@ -107,11 +107,11 @@ async function handle(request) {
       if (input === '0') return askList();
       const c = candidates.find((x) => String(x.num) === String(Number(input)));
       if (!c) {
-        return askList([await speak(`אין מתמודד במספר ${input}. נסו שוב.`, { name: `vote-bad-${callId}` })]);
+        return askList([await speak(`אין מתמודד במספר ${input}. נסו שוב.`, { cache: true })]);
       }
       st = { ...st, stage: 'confirm', num: c.num };
       await saveState(key, st);
-      return askOne(`בחרת ב${c.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { name: `vote-cf-${callId}` });
+      return askOne(`בחרת ב${c.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { cache: true });
     }
 
     // ---------- אישור ----------
@@ -124,10 +124,10 @@ async function handle(request) {
       const r = await setVote(phone, st.num);
       await saveState(key, { stage: 'done' });
       if (r.status === 'ok') {
-        return hangup(`הקול שלך ל${r.candidate} נקלט! תודה שהשתתפת בהצבעה של ${show}, ${bye}`, { name: `vote-ok-${callId}` });
+        return hangup(`הקול שלך ל${r.candidate} נקלט! תודה שהשתתפת בהצבעה של ${show}, ${bye}`, { cache: true });
       }
       if (r.status === 'already') {
-        return hangup(`כבר הצבעת ל${r.candidate}. אפשר להצביע רק פעם אחת. תודה, ${bye}`, { name: `vote-ok-${callId}` });
+        return hangup(`כבר הצבעת ל${r.candidate}. אפשר להצביע רק פעם אחת. תודה, ${bye}`, { cache: true });
       }
       if (r.status === 'closed') {
         return hangup(`ההצבעה של ${show} כבר נסגרה, ולכן הקול לא נקלט. תודה שהתקשרתם, והישארו איתנו לתוצאות!`);

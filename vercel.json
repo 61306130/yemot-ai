@@ -3,6 +3,10 @@
     {
       "path": "/api/podcast",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cleanup",
+      "schedule": "30 1 * * *"
     }
   ],
   "regions": [
