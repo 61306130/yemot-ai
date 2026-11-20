@@ -858,7 +858,7 @@ function Voting({ api, notify }) {
 }
 
 /* ============================ מערכת ============================ */
-const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי' };
+const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי', translate: 'תרגומון' };
 function System({ api, notify }) {
   const [e, reloadE, errE] = useLoad(() => api('errors'), [api]);
   const [u, reloadU] = useLoad(() => api('usage'), [api]);
