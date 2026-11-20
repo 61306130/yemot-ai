@@ -13,6 +13,7 @@ import {
 } from '../../../lib/voting.js';
 import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
+import { geminiKeyCount } from '../../../lib/ai.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -77,7 +78,7 @@ async function handle(request, ctx) {
       await clearErrors();
       return json({ ok: true });
     }
-    if (path === 'usage') return json({ usage: await usageToday() });
+    if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: Boolean(process.env.GROQ_API_KEY) });
 
     // ----- הגדרות -----
     if (path === 'settings' && method === 'GET') return json({ settings: await getSettings() });

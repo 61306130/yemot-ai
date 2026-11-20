@@ -880,7 +880,7 @@ function System({ api, notify }) {
       <Head title="מצב המערכת" sub="שגיאות וצריכת ספקים" right={<button className="btn ghost sm" onClick={() => { reloadE(); reloadU(); }}>רענון</button>} />
       <div className="grid cols">
         <div className="card glass">
-          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד</p></div></div>
+          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד{u ? ` · ${u.geminiKeys || 0} מפתחות Gemini פעילים${u.groq ? ' · Groq מחובר' : ''}` : ''}</p></div></div>
           {!u ? <Loading /> : !u.usage.length ? <Empty icon="📊" text="אין נתונים היום" /> : (
             Object.entries(byKind).map(([k, arr]) => (
               <div key={k} style={{ marginBottom: 14 }}>
