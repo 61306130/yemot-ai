@@ -573,7 +573,7 @@ function BotSettings({ api, notify }) {
   ];
   return (
     <>
-      <Head title="הגדרות הבוט" sub="התנהגות העוזר החכם" right={<button className="btn" onClick={save}>שמירה</button>} />
+      <Head title="הגדרות הבוט" sub="שלוחה 1 · התנהגות העוזר החכם" right={<button className="btn" onClick={save}>שמירה</button>} />
       <div className="grid cols">
         <div className="card glass">
           <h3 style={{ marginBottom: 16 }}>טקסטים</h3>
@@ -678,7 +678,7 @@ function NewsTab({ api, notify }) {
   const b = d?.bulletin;
   return (
     <>
-      <Head title="חדשות" sub="המהדורה הנוכחית" right={<button className="btn sm" onClick={refresh} disabled={busy}>{busy ? <span className="spin" /> : 'עדכן מהדורה'}</button>} />
+      <Head title="חדשות" sub="שלוחה 2 · המהדורה הנוכחית" right={<button className="btn sm" onClick={refresh} disabled={busy}>{busy ? <span className="spin" /> : 'עדכן מהדורה'}</button>} />
       <div className="card glass">
         {err ? <Empty text={err} /> : !d ? <Loading /> : !b ? <Empty icon="📰" text="אין מהדורה שמורה — לחצו 'עדכן מהדורה'" /> : (
           <>
@@ -713,7 +713,7 @@ function Podcast({ api, notify }) {
   };
   return (
     <>
-      <Head title="פודקאסט" sub="התוכנית המלאה של ינון ובן" right={
+      <Head title="פודקאסט" sub="שלוחה 8 · התוכנית המלאה של ינון ובן" right={
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn ghost sm" onClick={() => run(false)} disabled={busy}>בדוק פרק חדש</button>
           <button className="btn sm" onClick={() => run(true)} disabled={busy}>{busy ? <span className="spin" /> : 'הורד עכשיו'}</button>
@@ -741,7 +741,7 @@ function Podcast({ api, notify }) {
 function Transit() {
   return (
     <>
-      <Head title="תחבורה ציבורית" sub="שלוחה 4" />
+      <Head title="תחבורה ציבורית" sub="שלוחה 3" />
       <div className="card glass">
         <div className="rows">
           <div className="row"><div className="av">🗺️</div><div><div className="nm">תכנון מסלולים</div><div className="mt">מקור: Transitous (נתוני משרד התחבורה)</div></div><div className="end"><span className="tag ok">פעיל</span></div></div>
