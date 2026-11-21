@@ -274,6 +274,7 @@ async function handle(request) {
     }
 
     const { text: transcript, provider: sttBy } = await transcribe(audio);
+    const deadline = Date.now() + 22000; // זמן כולל לתשובה, כדי שימות לא תנתק
     if (!transcript) {
       return reply(recordRead(await say('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל, ובסיום הקש סולמית', { cache: true }), n + 1));
     }
@@ -290,7 +291,8 @@ async function handle(request) {
       ? { text: 'SEARCH', provider: 'ניתוב ישיר לחיפוש' }
       : await aiAnswer(
           BASE + (searchOn ? '\n' + SEARCH_RULE : '\nאין לך גישה לאינטרנט כרגע. אם שואלים על מחיר או נתון עדכני, אמור שאינך יכול לבדוק אותו עכשיו.') + '\n\n' + nowText(),
-          convo
+          convo,
+          deadline
         );
     // ה-AI ביקש חיפוש באינטרנט
     if (/^\W*SEARCH\W*$/i.test(answer.trim())) {
@@ -301,7 +303,8 @@ async function handle(request) {
             'כשאתה מוסר מחיר או נתון, אמור במילים מאיפה הוא, למשל "לפי האתר של רב קו", בלי כתובות אתרים. ' +
             'אם מצאת כמה מחירים שונים (למשל לפי סוג כרטיס או אזור), אמור את ההבדלים בקצרה. ' +
             'אם לא מצאת מידע ברור - אמור שלא הצלחת למצוא נתון מדויק, ואל תנחש.\n\n' + nowText(),
-          convo
+          convo,
+          deadline
         ));
       } catch (e) {
         // החיפוש לא זמין - עונים בכל זאת, בלי אינטרנט, ואומרים את זה למתקשר
