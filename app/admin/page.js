@@ -1064,7 +1064,7 @@ function System({ api, notify }) {
       <Head title="מצב המערכת" sub="שגיאות וצריכת ספקים" right={<button className="btn ghost sm" onClick={() => { reloadE(); reloadU(); }}>רענון</button>} />
       <div className="grid cols">
         <div className="card glass">
-          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד{u ? ` · ${u.geminiKeys || 0} מפתחות Gemini פעילים${u.groq ? ' · Groq מחובר' : ''}${u.tts?.keys ? ` · קול Chirp החודש: ${u.tts.chars.map((c, i) => `מפתח ${i + 1}: ${Math.round((c || 0) / 1000)} אלף מתוך ${Math.round((u.tts.limits?.[i] || 0) / 1000)} אלף תווים`).join(', ')}` : ''}` : ''}</p></div></div>
+          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד{u ? ` · ${u.geminiKeys || 0} מפתחות Gemini פעילים${u.groq ? ' · Groq מחובר' : ''}${u.tts?.keys ? ` · קול Chirp החודש: ${u.tts.chars.map((c, i) => `מפתח ${i + 1}: ${Math.round((c || 0) / 1000)} אלף תווים (${Math.round((u.tts.free || 0) / 1000)} אלף חינם)`).join(', ')}` : ''}${u.tts?.credit?.on ? ` · קרדיט Google Cloud: נוצלו ${u.tts.credit.spentUsd.toFixed(2)}$ מתוך ${u.tts.credit.capUsd}$` : ''}` : ''}</p></div></div>
           {!u ? <Loading /> : !u.usage.length ? <Empty icon="📊" text="אין נתונים היום" /> : (
             Object.entries(byKind).map(([k, arr]) => (
               <div key={k} style={{ marginBottom: 14 }}>
