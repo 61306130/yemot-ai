@@ -550,46 +550,145 @@ function CallerRow({ c, onSave }) {
 
 /* ============================ הגדרות הבוט ============================ */
 /* ============================ מערכות של משתמשים ============================ */
+const SVC_NAMES = { yemot: 'עוזר חכם', news: 'חדשות', transit: 'תחבורה', translate: 'תרגומון' };
+const HEALTH = {
+  ok: ['תקינה', 'var(--ok)'],
+  warn: ['לבדיקה', 'var(--warn)'],
+  bad: ['תקלה', 'var(--bad)'],
+  unknown: ['לא נבדקה', 'var(--muted)'],
+};
 function Systems({ api, notify }) {
-  const [d, reload, err] = useLoad(() => api('systems'), [api]);
+  const [d, reload, err] = useLoad(() => api('systems/monitor'), [api]);
   const [show, setShow] = useState({});
+  const [open, setOpen] = useState(null);
   const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [busy, setBusy] = useState('');
   const act = async (path, body, msg) => {
     try { await api(path, { method: 'POST', body }); notify(msg); reload(); } catch (e) { notify(e.message, 'err'); }
   };
-  const list = (d?.systems || []).filter((x) => !q || `${x.did} ${x.owner_name} ${x.owner_phone}`.includes(q.trim()));
-  const active = (x) => x.status === 'active' && x.last_seen && Date.now() - new Date(x.last_seen) < 7 * 864e5;
+  const check = async (did) => {
+    setBusy(did || 'all');
+    try {
+      const r = await api('systems/check', { method: 'POST', body: did ? { did } : {} });
+      notify(did ? `${did}: ${r.detail}` : `נבדקו ${r.results?.length || 0} מערכות`);
+      reload();
+    } catch (e) { notify(e.message, 'err'); }
+    setBusy('');
+  };
+  const recent = (x) => x.last_seen && Date.now() - new Date(x.last_seen) < 7 * 864e5;
+  const problem = (x) => x.status === 'active' && (x.health === 'bad' || x.errors24h >= 3 || x.last_error);
+  const all = d?.systems || [];
+  const list = all
+    .filter((x) => !q || `${x.did} ${x.owner_name} ${x.owner_phone}`.includes(q.trim()))
+    .filter((x) => filter === 'all' || (filter === 'problems' ? problem(x) : filter === 'active' ? x.status === 'active' && recent(x) : filter === 'idle' ? x.status === 'active' && !recent(x) : x.status !== 'active'));
+  const t = d?.totals || {};
+  const tiles = [
+    ['מערכות', t.systems ?? 0, 'var(--a1)'],
+    ['פעילות השבוע', t.active ?? 0, 'var(--ok)'],
+    ['שיחות היום', t.today ?? 0, 'var(--a2)'],
+    ['שיחות 7 ימים', t.week ?? 0, 'var(--a3)'],
+    ['שגיאות 24ש׳', t.errors24h ?? 0, t.errors24h ? 'var(--warn)' : 'var(--muted)'],
+    ['עם תקלה', t.problems ?? 0, t.problems ? 'var(--bad)' : 'var(--muted)'],
+  ];
+  const dayLabels = (t.days || []).map((x) => x.slice(8, 10) + '/' + x.slice(5, 7));
   return (
     <>
-      <Head title="מערכות של משתמשים" sub="מערכות שהוקמו דרך שלוחת פתיחת המערכת" right={<button className="btn ghost sm" onClick={reload}>רענון</button>} />
-      <div className="card glass">
-        <input className="inp" style={{ marginBottom: 14 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי מספר מערכת, שם או טלפון" />
-        {err ? <Empty text={err} /> : !d ? <Loading /> : !list.length ? <Empty icon="🏗️" text="עוד לא הוקמו מערכות" /> : (
-          <div className="rows">
-            {list.map((x) => (
-              <div className="row" key={x.did} style={{ alignItems: 'flex-start' }}>
-                <div className="av">{x.status === 'active' ? '✓' : '⏸'}</div>
-                <div style={{ flex: 1 }}>
-                  <div className="nm">{x.did} {x.status !== 'active' ? <span className="tag bad">מושבתת</span> : active(x) ? <span className="tag">פעילה</span> : <span className="tag" style={{ opacity: 0.6 }}>לא פעילה השבוע</span>}</div>
-                  <div className="mt">
-                    בעלים: {x.owner_name || 'ללא שם'} · {x.owner_phone ? fmtPhone(x.owner_phone) : 'מספר חסוי'} ·
-                    סיסמה: <span style={{ fontFamily: 'monospace' }}>{show[x.did] ? x.password : '••••'}</span>{' '}
-                    <a style={{ cursor: 'pointer', color: '#19d3ff' }} onClick={() => setShow((s) => ({ ...s, [x.did]: !s[x.did] }))}>{show[x.did] ? 'הסתר' : 'הצג'}</a>
-                  </div>
-                  <div className="mt">הוקמה {new Date(x.created_at).toLocaleDateString('he-IL')} · {x.calls} שיחות · {x.last_seen ? `שימוש אחרון ${timeAgo(x.last_seen)}` : 'עוד לא היו שיחות'}</div>
-                  {x.last_error && <div className="mt" style={{ color: '#ff6b8b' }}>שגיאה בהקמה: {x.last_error}</div>}
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button className="btn ghost sm" onClick={() => act('systems/status', { did: x.did, status: x.status === 'active' ? 'disabled' : 'active' }, x.status === 'active' ? 'המערכת הושבתה' : 'המערכת הופעלה')}>
-                    {x.status === 'active' ? 'השבתה' : 'הפעלה'}
-                  </button>
-                  <button className="btn danger sm" onClick={() => confirm(`למחוק את המערכת ${x.did} מהרשימה? השלוחות שלה יפסיקו לעבוד.`) && act('systems/delete', { did: x.did }, 'המערכת נמחקה')}>מחיקה</button>
-                </div>
+      <Head title="ניטור מערכות" sub="כל המערכות שהוקמו דרך שלוחת פתיחת המערכת"
+        right={<div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn ghost sm" onClick={() => check()} disabled={!!busy}>{busy === 'all' ? <span className="spin" /> : 'בדיקת כל המערכות'}</button>
+          <button className="btn ghost sm" onClick={reload}>רענון</button>
+        </div>} />
+      {err ? <div className="card glass"><Empty text={err} /></div> : !d ? <Loading /> : (
+        <>
+          <div className="grid stats" style={{ marginBottom: 16 }}>
+            {tiles.map(([l, v, c], i) => (
+              <div className="stat glass" key={l} style={{ animationDelay: `${i * 60}ms` }}>
+                <div className="v" style={{ color: c }}>{v}</div><div className="l">{l}</div>
               </div>
             ))}
           </div>
-        )}
-      </div>
+          {all.length > 0 && (
+            <div className="card glass" style={{ marginBottom: 16 }}>
+              <div className="ch"><div><h3>שיחות בכל המערכות</h3><p>14 הימים האחרונים</p></div></div>
+              <MiniBars data={t.byDay || []} labels={dayLabels} every={2} />
+            </div>
+          )}
+          <div className="card glass">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+              <input className="inp" style={{ flex: 1, minWidth: 200 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי מספר מערכת, שם או טלפון" />
+              {[['all', 'הכול'], ['problems', 'עם תקלה'], ['active', 'פעילות'], ['idle', 'לא פעילות'], ['off', 'מושבתות']].map(([k, l]) => (
+                <button key={k} className={`btn sm ${filter === k ? '' : 'ghost'}`} onClick={() => setFilter(k)}>{l}</button>
+              ))}
+            </div>
+            {!list.length ? <Empty icon="🏗️" text={all.length ? 'אין מערכות שמתאימות לסינון' : 'עוד לא הוקמו מערכות'} /> : (
+              <div className="rows">
+                {list.map((x) => {
+                  const [hl, hc] = HEALTH[x.health || 'unknown'] || HEALTH.unknown;
+                  const isOpen = open === x.did;
+                  return (
+                    <div key={x.did} className="row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', width: '100%', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }} onClick={() => setOpen(isOpen ? null : x.did)}>
+                        <div className="av" style={{ background: x.status !== 'active' ? 'var(--muted)' : hc }}>{x.status !== 'active' ? '⏸' : x.health === 'bad' ? '!' : '✓'}</div>
+                        <div style={{ flex: 1 }}>
+                          <div className="nm">
+                            {x.did}{' '}
+                            {x.status !== 'active' ? <span className="tag bad">מושבתת</span> : <span className="tag" style={{ color: hc, borderColor: hc }}>{hl}</span>}{' '}
+                            {x.status === 'active' && !recent(x) && <span className="tag" style={{ opacity: 0.6 }}>לא פעילה השבוע</span>}
+                            {x.errors24h > 0 && <span className="tag" style={{ color: 'var(--warn)' }}>{x.errors24h} שגיאות היום</span>}
+                          </div>
+                          <div className="mt">
+                            {x.owner_name || 'ללא שם'} · {x.owner_phone ? fmtPhone(x.owner_phone) : 'מספר חסוי'} ·
+                            היום {x.today} · השבוע {x.week} · סה״כ {x.calls} שיחות ·
+                            {x.last_seen ? ` שימוש אחרון ${timeAgo(x.last_seen)}` : ' עוד לא היו שיחות'}
+                          </div>
+                        </div>
+                        <div className="mt" style={{ whiteSpace: 'nowrap' }}>{isOpen ? '▲' : '▼'}</div>
+                      </div>
+                      {isOpen && (
+                        <div style={{ width: '100%', paddingInlineStart: 52 }}>
+                          <div className="mt" style={{ marginBottom: 8 }}>
+                            בדיקת תקינות: <b style={{ color: hc }}>{hl}</b>{x.health_detail ? ` — ${x.health_detail}` : ''}
+                            {x.health_at ? ` (נבדקה ${timeAgo(x.health_at)})` : ''}
+                          </div>
+                          {x.last_error && <div className="mt" style={{ color: '#ff6b8b', marginBottom: 8 }}>שגיאה בהקמה: {x.last_error}</div>}
+                          <div className="mt" style={{ marginBottom: 8 }}>
+                            שירותים השבוע: {Object.keys(x.services || {}).length
+                              ? Object.entries(x.services).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${SVC_NAMES[k] || k} ${v}`).join(' · ')
+                              : 'אין שימוש'}
+                          </div>
+                          <MiniBars data={x.byDay || []} labels={dayLabels} every={2} />
+                          {x.recentErrors?.length > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                              <div className="mt" style={{ marginBottom: 4 }}>שגיאות אחרונות:</div>
+                              {x.recentErrors.map((e, i) => (
+                                <div key={i} className="mt" style={{ fontFamily: 'monospace', fontSize: 11, direction: 'ltr', textAlign: 'left', opacity: 0.85 }}>
+                                  {new Date(e.created_at).toLocaleString('he-IL')} [{e.source}] {String(e.message).split('\n')[0]}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt" style={{ margin: '10px 0' }}>
+                            הוקמה {new Date(x.created_at).toLocaleDateString('he-IL')} · סיסמה: <span style={{ fontFamily: 'monospace' }}>{show[x.did] ? x.password : '••••'}</span>{' '}
+                            <a style={{ cursor: 'pointer', color: '#19d3ff' }} onClick={() => setShow((s) => ({ ...s, [x.did]: !s[x.did] }))}>{show[x.did] ? 'הסתר' : 'הצג'}</a>
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button className="btn ghost sm" onClick={() => check(x.did)} disabled={!!busy}>{busy === x.did ? <span className="spin" /> : 'בדיקת תקינות'}</button>
+                            <button className="btn ghost sm" onClick={() => act('systems/status', { did: x.did, status: x.status === 'active' ? 'disabled' : 'active' }, x.status === 'active' ? 'המערכת הושבתה' : 'המערכת הופעלה')}>
+                              {x.status === 'active' ? 'השבתה' : 'הפעלה'}
+                            </button>
+                            <button className="btn danger sm" onClick={() => confirm(`למחוק את המערכת ${x.did} מהרשימה? השלוחות שלה יפסיקו לעבוד.`) && act('systems/delete', { did: x.did }, 'המערכת נמחקה')}>מחיקה</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
