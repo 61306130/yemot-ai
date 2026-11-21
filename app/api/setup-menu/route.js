@@ -13,6 +13,8 @@ const MENU_TEXT =
 export async function GET() {
   try {
     const result = await speakToPath(MENU_TEXT, MENU_PATH);
+    // קובץ TTS ישן של התפריט עלול לגבור על קובץ הקול - מוחקים אותו אם יש
+    await fetch('https://www.call2all.co.il/ym/api/FileAction?' + new URLSearchParams({ token: process.env.YEMOT_TOKEN || '', action: 'delete', what0: 'ivr2:/M1000.tts' })).catch(() => {});
     await setSettings({ 'menu.text': MENU_TEXT }).catch(() => {}); // שהאתר יציג את הטקסט העדכני
     return Response.json({ status: 'ok', path: MENU_PATH, yemot: result, text: MENU_TEXT });
   } catch (err) {
