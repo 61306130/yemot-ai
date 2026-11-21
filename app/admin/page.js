@@ -744,6 +744,13 @@ function BotSettings({ api, notify }) {
   if (err) return <><Head title="הגדרות הבוט" /><div className="card glass"><Empty text={err} /></div></>;
   if (!s) return <><Head title="הגדרות הבוט" /><Loading /></>;
   const voices = [
+    ['he-IL-Chirp3-HD-Charon', 'Chirp 3 HD צ׳רון — גבר (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Orus', 'Chirp 3 HD אורוס — גבר (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Puck', 'Chirp 3 HD פאק — גבר (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Fenrir', 'Chirp 3 HD פנריר — גבר (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Zephyr', 'Chirp 3 HD זפיר — אישה (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Kore', 'Chirp 3 HD קורה — אישה (Google Cloud)'],
+    ['he-IL-Chirp3-HD-Aoede', 'Chirp 3 HD אואדה — אישה (Google Cloud)'],
     ['google', 'גוגל (Google Translate) — גיבוי: אברי'],
     ['he-IL-AvriNeural', 'אברי — גבר'],
     ['he-IL-HilaNeural', 'הילה — אישה'],
