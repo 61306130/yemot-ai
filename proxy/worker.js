@@ -36,4 +36,8 @@ export default {
       headers: { 'content-type': res.headers.get('content-type') || 'text/plain; charset=utf-8' },
     });
   },
+  // טריגר מתוזמן (Settings -> Triggers -> Cron: */30 * * * *): בניית מהדורת חדשות כל חצי שעה
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(fetch(env.ORIGIN.replace(/\/$/, '') + '/api/news-refresh', { headers: { 'x-proxy-key': env.PROXY_SECRET || '' } }));
+  },
 };

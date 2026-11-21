@@ -6,7 +6,7 @@ import {
   recentErrors, clearErrors, usageToday, podcastHistory, searchCallers, callerProfile } from '../../../lib/admin.js';
 import { getSettings, setSettings, logError } from '../../../lib/store.js';
 import { runPodcast } from '../../../lib/podcast.js';
-import { getBulletin } from '../../../lib/news.js';
+import { getBulletin, refreshBulletin } from '../../../lib/news.js';
 import {
   getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, resetAll, getResults,
 } from '../../../lib/voting.js';
@@ -127,7 +127,7 @@ async function handle(request, ctx) {
       return json({ bulletin: b });
     }
     if (path === 'news/refresh' && method === 'POST') {
-      const b = await getBulletin();
+      const b = await refreshBulletin(); // תמיד מהדורה חדשה, גם אם הקודמת עדכנית
       return json({ bulletin: b });
     }
 

@@ -1,6 +1,7 @@
 import { resolveSystem, enterSystem } from '../../../lib/systems.js';
 // שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה בקול טבעי, ואפשר להקיש מספר ידיעה בכל רגע.
-import { getBulletin } from '../../../lib/news.js';
+import { getBulletin, anyBulletin, refreshBulletin, bulletinText as makeText } from '../../../lib/news.js';
+import { after } from 'next/server';
 import { say } from '../../../lib/voice.js';
 import { logError } from '../../../lib/store.js';
 
@@ -44,30 +45,24 @@ async function handle(request) {
   const n = sels.length ? sels[sels.length - 1] : 0;
   const choice = n ? String(p[`sel${n}`]) : null;
 
-  // כניסה לשלוחה: אם אין מהדורה עדכנית - קודם הודעת המתנה, ומיד אחריה ימות חוזרת לכאן (wait=None)
-  if (!choice && !p.wait) {
-    const ready = await getBulletin({ build: false }).catch(() => null);
-    if (!ready) return reply(tapRead([await say(WAIT, { cache: true })], 'wait', 1));
-  }
-
+  // יש מהדורה (גם אם קצת ישנה) - מקריאים מיד. אם ישנה, בונים חדשה ברקע אחרי התשובה.
+  // אין מהדורה בכלל - קודם הודעת המתנה, ומיד אחריה ימות חוזרת לכאן (wait=None) ואז בונים
   let bulletin;
-  try {
-    bulletin = await getBulletin();
-  } catch (err) {
-    logError('news', err);
-    return reply(`id_list_message=${await say('סליחה, לא ניתן לטעון את החדשות כרגע. נסו שוב בעוד כמה דקות', { cache: true })}&go_to_folder=/`);
+  const have = await anyBulletin();
+  if (have) {
+    bulletin = have.data;
+    if (have.stale) after(() => refreshBulletin().catch((e) => console.error('חדשות ברקע:', e)));
+  } else {
+    if (!choice && !p.wait) return reply(tapRead([await say(WAIT, { cache: true })], 'wait', 1));
+    try {
+      bulletin = await getBulletin();
+    } catch (err) {
+      logError('news', err);
+      return reply(`id_list_message=${await say('סליחה, לא ניתן לטעון את החדשות כרגע. נסו שוב בעוד כמה דקות', { cache: true })}&go_to_folder=/`);
+    }
   }
   const items = bulletin.items;
-  const time = new Date(bulletin.createdAt).toLocaleTimeString('he-IL', {
-    timeZone: 'Asia/Jerusalem',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  // המהדורה המלאה כטקסט אחד: "1. כותרת. תקציר. 2. ..." - נוצרת בקול פעם אחת ונשמרת
-  const bulletinText =
-    `מהדורת חדשות, מעודכנת לשעה ${time}.\n` +
-    items.map((x, i) => `${i + 1}. ${x.title}. ${x.summary}`).join('\n');
+  const bulletinText = makeText(bulletin);
 
   // כניסה לשלוחה, או בקשה לשמיעה חוזרת
   if (!choice || choice === '0') {
