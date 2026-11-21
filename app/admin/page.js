@@ -596,6 +596,12 @@ function Systems({ api, notify }) {
     <>
       <Head title="ניטור מערכות" sub="כל המערכות שהוקמו דרך שלוחת פתיחת המערכת"
         right={<div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn ghost sm" onClick={async () => {
+            if (!confirm('לכתוב מחדש את התפריט, הודעת התפריט, שלוחות 1-4 ושלוחת הכוכבית בכל המערכות הפעילות?')) return;
+            setBusy('refresh');
+            try { const r = await api('systems/refresh-all', { method: 'POST', body: {} }); const bad = (r.results || []).filter((x) => !x.ok).length; notify(`עודכנו ${(r.results || []).length - bad} מערכות${bad ? `, ${bad} נכשלו` : ''}`); reload(); } catch (e) { notify(e.message, 'err'); }
+            setBusy('');
+          }} disabled={!!busy}>{busy === 'refresh' ? <span className="spin" /> : 'עדכון תפריט בכל המערכות'}</button>
           <button className="btn ghost sm" onClick={() => check()} disabled={!!busy}>{busy === 'all' ? <span className="spin" /> : 'בדיקת כל המערכות'}</button>
           <button className="btn ghost sm" onClick={reload}>רענון</button>
         </div>} />

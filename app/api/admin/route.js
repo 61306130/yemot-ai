@@ -13,7 +13,7 @@ import {
 import { say, speakToPath, previewVoice, cloudTtsUsage } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
 import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
-import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems } from '../../../lib/systems.js';
+import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems, refreshAllSystems } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -69,6 +69,10 @@ async function handle(request, ctx) {
     if (path === 'systems/check' && method === 'POST') {
       const { did } = await body(request);
       return json(did ? await checkSystem(String(did)) : { results: await checkAllSystems({ limit: 40 }) });
+    }
+    if (path === 'systems/refresh-all' && method === 'POST') {
+      const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
+      return json({ results: await refreshAllSystems({ baseUrl, speakMenu: speakToPath, limit: 30 }) });
     }
     if (path === 'systems/delete' && method === 'POST') {
       await deleteSystem(String((await body(request)).did));
