@@ -12,7 +12,7 @@ import {
 } from '../../../lib/voting.js';
 import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
-import { geminiKeyCount } from '../../../lib/ai.js';
+import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
 import { listSystems, setSystemStatus, deleteSystem } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
@@ -95,6 +95,7 @@ async function handle(request, ctx) {
       return json({ ok: true });
     }
     if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: Boolean(process.env.GROQ_API_KEY) });
+    if (path === 'aitest') return json(await diagnose());
 
     // ----- הגדרות -----
     if (path === 'settings' && method === 'GET') return json({ settings: await getSettings() });
