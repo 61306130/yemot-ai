@@ -10,7 +10,7 @@ import { getBulletin } from '../../../lib/news.js';
 import {
   getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, resetAll, getResults,
 } from '../../../lib/voting.js';
-import { say, speakToPath, previewVoice } from '../../../lib/voice.js';
+import { say, speakToPath, previewVoice, cloudTtsUsage } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
 import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
 import { listSystems, setSystemStatus, deleteSystem } from '../../../lib/systems.js';
@@ -94,7 +94,7 @@ async function handle(request, ctx) {
       await clearErrors();
       return json({ ok: true });
     }
-    if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: Boolean(process.env.GROQ_API_KEY) });
+    if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: Boolean(process.env.GROQ_API_KEY), tts: await cloudTtsUsage().catch(() => null) });
     if (path === 'aitest') return json(await diagnose());
 
     // ----- הגדרות -----
