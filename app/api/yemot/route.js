@@ -182,7 +182,7 @@ async function handle(request) {
   }
   console.log('פנייה מימות:', p);
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
-  const sys = await resolveSystem(p).catch(() => ({}));
+  const sys = await resolveSystem(p, request).catch(() => ({}));
   if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
   enterSystem(sys);
 

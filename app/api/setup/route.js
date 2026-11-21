@@ -12,7 +12,7 @@ import { hasDb, sql } from '../../../lib/db.js';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const YEMOT_NEW_SYSTEM = '0773137770'; // ימות המשיח - פתיחת מערכת חדשה בשלוחה 3
+const YEMOT_NEW_SYSTEM = '0773137770/3'; // ימות המשיח - ניסיון העברה ישירה לשלוחה 3 (פתיחת מערכת). אם לא עובד: '0773137770'
 const spell = (d) => String(d).split('').join(' ');
 
 async function handle(request) {

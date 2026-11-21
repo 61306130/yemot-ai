@@ -28,7 +28,7 @@ export async function POST(request) {
 async function handle(request) {
   const p = await readParams(request);
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
-  const sys = await resolveSystem(p).catch(() => ({}));
+  const sys = await resolveSystem(p, request).catch(() => ({}));
   if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
   enterSystem(sys);
   if (p.hangup === 'yes') return reply('', 'תחבורה');
