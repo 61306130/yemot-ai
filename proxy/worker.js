@@ -7,10 +7,17 @@
 //   PROXY_SECRET  = מחרוזת סודית ארוכה (אותה מחרוזת מגדירים גם ב-Vercel)
 // וב-Vercel: PUBLIC_BASE_URL = כתובת ה-Worker, PROXY_SECRET = אותה מחרוזת.
 const ALLOWED = ['yemot', 'news', 'transit', 'translate', 'setup', 'vote', 'vote-admin'];
+// כתובת אישית לכל מערכת: /<מפתח המערכת>/<שירות>
+const PER_SYSTEM = ['yemot', 'news', 'transit', 'translate'];
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const own = url.pathname.match(/^\/([a-f0-9]{16,64})\/([a-z]+)\/?$/);
+    if (own && PER_SYSTEM.includes(own[2])) {
+      url.searchParams.set('k', own[1]);
+      url.pathname = '/api/' + own[2];
+    }
     const route = url.pathname.replace(/^\/api\//, '').replace(/\/$/, '');
     if (!env.ORIGIN || !url.pathname.startsWith('/api/') || !ALLOWED.includes(route)) {
       return new Response('Not found', { status: 404 });
