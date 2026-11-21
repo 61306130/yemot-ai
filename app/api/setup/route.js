@@ -12,7 +12,10 @@ import { hasDb, sql } from '../../../lib/db.js';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const YEMOT_NEW_SYSTEM = '0773137770/3'; // ימות המשיח - ניסיון העברה ישירה לשלוחה 3 (פתיחת מערכת). אם לא עובד: '0773137770'
+// מי שאין לו מערכת עובר לשלוחה הזו במערכת הראשית, שמוגדרת כהעברה למערכת אחרת בימות:
+//   type=routing_yemot
+//   routing_yemot_number=0773137770
+const NEW_SYSTEM_FOLDER = process.env.SETUP_ROUTING_FOLDER || '/99';
 const spell = (d) => String(d).split('').join(' ');
 
 async function handle(request) {
@@ -56,7 +59,7 @@ async function handle(request) {
             'כשתתבקשו לבחור סיסמה, בחרו סיסמה פשוטה מספרות בלבד, ורשמו אותה בצד. בסיום תקבלו שיחה עם מספר המערכת החדשה שלכם. ' +
             'אחר כך התקשרו אלינו שוב, היכנסו לשלוחה הזו והקישו 1, ונקים לכם את כל השירותים. בהצלחה!'
         );
-        return reply(`id_list_message=${msg}&routing_yemot=${YEMOT_NEW_SYSTEM}`);
+        return reply(`id_list_message=${msg}&go_to_folder=${NEW_SYSTEM_FOLDER}`);
       }
       if (input !== '1') return ask1('אם כבר יש לכם מערכת בימות המשיח, הקישו 1. אם אין לכם, הקישו 2.');
       await save({ stage: 'did' });
