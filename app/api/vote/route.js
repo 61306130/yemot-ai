@@ -7,15 +7,20 @@
 import { reply, readParams, digitsRead } from '../../../lib/yemot.js';
 import { say, plainTts } from '../../../lib/voice.js';
 import { getConfig, getCandidates, getMyVote, setVote } from '../../../lib/voting.js';
+import { voteTexts, warmVoting } from '../../../lib/voting-voice.js';
+import { after } from 'next/server';
+import { createHash } from 'node:crypto';
+import { getSettings, setSettings } from '../../../lib/store.js';
 import { loadState, saveState, logError } from '../../../lib/store.js';
 
 // ההצבעה רצה על מערכת ימות נפרדת. אם הוגדר VOTE_YEMOT_TOKEN - קול טבעי שמועלה למערכת ההיא.
 // אחרת - הקראה רגילה של ימות (עובדת בכל מערכת בלי הגדרות).
 const VT = process.env.VOTE_YEMOT_TOKEN;
-const speak = (t, o = {}) => (VT ? say(t, { ...o, token: VT }) : Promise.resolve(plainTts(t)));
+// background: הודעה שעוד לא הוקלטה מושמעת מיד בהקראה של ימות ומוקלטת ברקע - אף מצביע לא מחכה
+const speak = (t, o = {}) => (VT ? say(t, { background: true, ...o, token: VT }) : Promise.resolve(plainTts(t)));
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60; // מקום להקלטות ברקע אחרי התשובה
 
 export async function GET(request) {
   return handle(request);
@@ -54,16 +59,23 @@ async function handle(request) {
       return hangup(`שלום, הגעתם לקו ההצבעה של ${show}. המתמודדים עדיין לא עלו לבמה. נסו שוב בעוד כמה דקות. להתראות!`);
     }
 
-    // עד 9 מתמודדים - הקשה אחת מספיקה. מעל 9 - מספר וסולמית
-    const twoDigits = Math.max(...candidates.map((c) => c.num)) > 9;
-    const listKey = `poll-list-r${cfg.round}`;
-    const introText = `ברוכים הבאים להצבעה של ${show}, תוכנית הכישרונות של הישיבה! עכשיו זה בידיים שלכם: מי הכי מוכשר?`;
-    const listText =
-      candidates.map((c) => `ל${c.name}, הקישו ${c.num}.`).join(' ') +
-      (twoDigits ? ' הקישו את מספר המתמודד, ובסיום סולמית.' : ' הקישו את מספר המתמודד.') +
-      ' לשמיעת הרשימה שוב, הקישו אפס.';
+    // עד 9 מתמודדים - הקשה אחת מספיקה. מעל 9 - מספר וסולמית. הנוסחים ב-lib/voting-voice.js
+    const T = voteTexts(show, candidates);
+    const { twoDigits, listLines } = T;
+    const introText = T.intro;
+
+    // פעם אחת לכל נוסח (שם תוכנית + רשימת מתמודדים): הקלטת כל ההודעות מראש ברקע
+    if (!n && VT) {
+      const sig = createHash('sha1').update(JSON.stringify([show, candidates.map((c) => [c.num, c.name])])).digest('hex').slice(0, 16);
+      const done = (await getSettings().catch(() => ({})))['vote.warmed'];
+      if (done !== sig) {
+        await setSettings({ 'vote.warmed': sig }).catch(() => {});
+        after(() => warmVoting().catch(() => {}));
+      }
+    }
+
     const askList = async (pre = []) =>
-      reply(digitsRead([...pre, await speak(listText, { cache: true, name: listKey })], next, { min: 1, max: twoDigits ? 2 : 1, secWait: WAIT }));
+      reply(digitsRead([...pre, ...(await Promise.all(listLines.map((t) => speak(t, { cache: true }))))], next, { min: 1, max: twoDigits ? 2 : 1, secWait: WAIT }));
     const askOne = async (text, opts = { cache: true }) =>
       reply(digitsRead([await speak(text, opts)], next, { min: 1, max: 1, secWait: WAIT }));
 
@@ -73,10 +85,7 @@ async function handle(request) {
     if (!n || !st) {
       const mine = await getMyVote(phone);
       if (mine) {
-        return hangup(
-          `שלום, כבר הצבעת ל${mine.name} בהצבעה של ${show}. אפשר להצביע רק פעם אחת. תודה שהשתתפת, ${bye}`,
-          { cache: true }
-        );
+        return hangup(T.alreadyEntry(mine.name), { cache: true });
       }
       st = { stage: 'choose', silent: 0 };
       await saveState(key, st);
@@ -88,16 +97,12 @@ async function handle(request) {
       st.silent = (st.silent || 0) + 1;
       await saveState(key, st);
       if (st.silent >= MAX_SILENT) {
-        return hangup(
-          st.stage === 'confirm'
-            ? 'לא אישרת את הבחירה, ולכן הקול לא נקלט. אפשר להתקשר שוב ולהצביע. להתראות!'
-            : 'לא נקלטה בחירה. אפשר להתקשר שוב ולהצביע. להתראות!'
-        );
+        return hangup(st.stage === 'confirm' ? T.fixed[3] : T.fixed[4]);
       }
-      if (st.stage === 'choose') return askList([await speak('לא שמעתי בחירה. הנה הרשימה שוב.', { cache: true })]);
+      if (st.stage === 'choose') return askList([await speak(T.fixed[0], { cache: true })]);
       if (st.stage === 'confirm') {
         const c = candidates.find((x) => x.num === st.num);
-        return askOne(`לא שמעתי. בחרת ב${c?.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { cache: true });
+        return askOne(T.choseAgain(c?.name), { cache: true });
       }
     }
     st.silent = 0;
@@ -111,7 +116,7 @@ async function handle(request) {
       }
       st = { ...st, stage: 'confirm', num: c.num };
       await saveState(key, st);
-      return askOne(`בחרת ב${c.name}. לאישור הקישו 1. לבחירה מחדש הקישו 2.`, { cache: true });
+      return askOne(T.chose(c.name), { cache: true });
     }
 
     // ---------- אישור ----------
@@ -119,15 +124,15 @@ async function handle(request) {
       if (input !== '1') {
         st = { stage: 'choose', silent: 0 };
         await saveState(key, st);
-        return askList([await speak('בסדר, בחרו מחדש.', { cache: true })]);
+        return askList([await speak(T.fixed[1], { cache: true })]);
       }
       const r = await setVote(phone, st.num);
       await saveState(key, { stage: 'done' });
       if (r.status === 'ok') {
-        return hangup(`הקול שלך ל${r.candidate} נקלט! תודה שהשתתפת בהצבעה של ${show}, ${bye}`, { cache: true });
+        return hangup(T.done(r.candidate), { cache: true });
       }
       if (r.status === 'already') {
-        return hangup(`כבר הצבעת ל${r.candidate}. אפשר להצביע רק פעם אחת. תודה, ${bye}`, { cache: true });
+        return hangup(T.already(r.candidate), { cache: true });
       }
       if (r.status === 'closed') {
         return hangup(`ההצבעה של ${show} כבר נסגרה, ולכן הקול לא נקלט. תודה שהתקשרתם, והישארו איתנו לתוצאות!`);
@@ -135,7 +140,7 @@ async function handle(request) {
       // המתמודד נמחק בינתיים
       st = { stage: 'choose', silent: 0 };
       await saveState(key, st);
-      return askList([await speak('המתמודד הזה כבר לא ברשימה. בחרו שוב.', { cache: true })]);
+      return askList([await speak(T.fixed[2], { cache: true })]);
     }
 
     // מצב לא צפוי - מתחילים מחדש
