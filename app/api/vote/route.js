@@ -46,9 +46,13 @@ async function handle(request) {
   const hangup = async (text, opts = { cache: true }) =>
     reply(`id_list_message=${await speak(text, opts)}&go_to_folder=hangup`);
 
+  const T0 = Date.now();
+  const lap = (m) => console.log(`vote ${callId} +${Date.now() - T0}ms ${m}`);
   try {
     const cfg = await getConfig();
+    lap('config');
     const candidates = await getCandidates();
+    lap('candidates');
     const show = cfg.title || 'המוכשר';
     const bye = 'ובהצלחה לכל המתמודדים!';
 
@@ -68,6 +72,7 @@ async function handle(request) {
     if (!n && VT) {
       const sig = createHash('sha1').update(JSON.stringify([show, candidates.map((c) => [c.num, c.name])])).digest('hex').slice(0, 16);
       const done = (await getSettings().catch(() => ({})))['vote.warmed'];
+      lap('settings');
       if (done !== sig) {
         await setSettings({ 'vote.warmed': sig }).catch(() => {});
         after(() => warmVoting().catch(() => {}));
@@ -87,9 +92,15 @@ async function handle(request) {
       if (mine) {
         return hangup(T.alreadyEntry(mine.name), { cache: true });
       }
+      lap('myvote');
       st = { stage: 'choose', silent: 0 };
       await saveState(key, st);
-      return askList([await speak(introText, { cache: true })]);
+      lap('state');
+      const introRef = await speak(introText, { cache: true });
+      lap('intro ' + introRef.slice(0, 20));
+      const resp = await askList([introRef]);
+      lap('list');
+      return resp;
     }
 
     // ---------- לא הקישו כלום ----------
