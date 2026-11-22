@@ -33,6 +33,11 @@ async function handle(request) {
     } catch {}
   }
   if (p.hangup === 'yes') return reply('');
+  // אבחון זמני של נעילות במסד - רק דרך כתובת הביניים (עם המפתח הסודי שלה)
+  if (p.dbdiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
+    const { dbDiag } = await import('../../../lib/dbdiag.js');
+    return Response.json(await dbDiag(p.dbdiag === 'fix'));
+  }
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
   const sys = await resolveSystem(p, request).catch(() => ({}));
   if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
