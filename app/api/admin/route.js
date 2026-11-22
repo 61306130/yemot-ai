@@ -13,7 +13,7 @@ import {
 import { say, speakToPath, previewVoice, cloudTtsUsage } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
 import { warmVoting } from '../../../lib/voting-voice.js';
-import { after } from 'next/server';
+import { bg } from '../../../lib/bg.js';
 import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
 import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems, refreshAllSystems } from '../../../lib/systems.js';
 
@@ -153,17 +153,17 @@ async function handle(request, ctx) {
       for (const c of candidates || []) {
         if (c.name && String(c.name).trim()) await setCandidate(c.num, c.name);
       }
-      after(() => warmVoting().catch(() => {})); // הקלטת כל ההודעות מראש, ברקע
+      bg(() => warmVoting().catch(() => {})); // הקלטת כל ההודעות מראש, ברקע
       return json({ ok: true, candidates: await getCandidates() });
     }
     if (path === 'voting/title' && method === 'POST') {
       await setTitle((await body(request)).title);
-      after(() => warmVoting().catch(() => {}));
+      bg(() => warmVoting().catch(() => {}));
       return json({ ok: true });
     }
     if (path === 'voting/open' && method === 'POST') {
       await setOpen(!!(await body(request)).open);
-      after(() => warmVoting().catch(() => {}));
+      bg(() => warmVoting().catch(() => {}));
       return json({ ok: true, config: await getConfig() });
     }
     if (path === 'voting/reset' && method === 'POST') {

@@ -1,7 +1,7 @@
 import { resolveSystem, enterSystem } from '../../../lib/systems.js';
 // שלוחת חדשות (ימות פונה לכאן). מקריא מהדורה בקול טבעי, ואפשר להקיש מספר ידיעה בכל רגע.
 import { getBulletin, anyBulletin, refreshBulletin, bulletinText as makeText } from '../../../lib/news.js';
-import { after } from 'next/server';
+import { bg } from '../../../lib/bg.js';
 import { say } from '../../../lib/voice.js';
 import { logError } from '../../../lib/store.js';
 
@@ -56,7 +56,7 @@ async function handle(request) {
   const have = await anyBulletin();
   if (have) {
     bulletin = have.data;
-    if (have.stale) after(() => refreshBulletin().catch((e) => console.error('חדשות ברקע:', e)));
+    if (have.stale) bg(() => refreshBulletin().catch((e) => console.error('חדשות ברקע:', e)));
   } else {
     if (!choice && !p.wait) return reply(tapRead([await say(WAIT, { cache: true })], 'wait', 1));
     try {

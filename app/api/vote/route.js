@@ -8,7 +8,7 @@ import { reply, readParams, digitsRead } from '../../../lib/yemot.js';
 import { say, plainTts } from '../../../lib/voice.js';
 import { getConfig, getCandidates, getMyVote, setVote } from '../../../lib/voting.js';
 import { voteTexts, warmVoting } from '../../../lib/voting-voice.js';
-import { after } from 'next/server';
+import { bg } from '../../../lib/bg.js';
 import { createHash } from 'node:crypto';
 import { getSettings, setSettings } from '../../../lib/store.js';
 import { loadState, saveState, logError } from '../../../lib/store.js';
@@ -75,7 +75,7 @@ async function handle(request) {
       lap('settings');
       if (done !== sig) {
         await setSettings({ 'vote.warmed': sig }).catch(() => {});
-        after(() => warmVoting().catch(() => {}));
+        bg(() => warmVoting().catch(() => {}));
       }
     }
 

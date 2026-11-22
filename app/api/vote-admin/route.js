@@ -16,7 +16,7 @@ import {
   getConfig, getCandidates, getResults, setOpen, resetVotes, resetAll, setCandidate, MAX_CANDIDATES,
 } from '../../../lib/voting.js';
 import { warmVoting } from '../../../lib/voting-voice.js';
-import { after } from 'next/server';
+import { bg } from '../../../lib/bg.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -124,7 +124,7 @@ async function handle(request) {
         return reply(recordRead([await dyn(VT ? 'לא הצלחתי להבין את השם. אמרו שוב את שם המתמודד אחרי הצליל, ובסיום סולמית' : 'לא הצלחתי לקלוט את ההקלטה. אפשר להגדיר את שמות המתמודדים באתר הניהול. או נסו לומר שוב את השם אחרי הצליל, ובסיום סולמית')], next));
       }
       await setCandidate(num, name);
-      after(() => warmVoting().catch(() => {})); // הקלטת ההודעות של המתמודד החדש מראש
+      bg(() => warmVoting().catch(() => {})); // הקלטת ההודעות של המתמודד החדש מראש
       st = { stage: 'menu' };
       await saveState(key, st);
       return reply(tapRead([await dyn(`מתמודד מספר ${num}: ${name}.`), await fixed('להגדרת מתמודד נוסף הקישו 4. לתפריט הקישו 0')], next));
