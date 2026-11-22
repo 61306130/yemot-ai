@@ -34,6 +34,10 @@ const MAX_SILENT = 3; // כמה פעמים בלי הקשה לפני ניתוק
 
 async function handle(request) {
   const p0 = Object.fromEntries(new URL(request.url).searchParams);
+  if (p0.warm) {
+    // הקלטת כל הודעות ההצבעה מראש (עד ~50 שניות לקריאה; אפשר לקרוא שוב עד שהכול מוקלט)
+    return Response.json(await warmVoting().catch((e) => ({ error: String(e?.message || e) })));
+  }
   if (p0.dbg) {
     // אבחון זמני: מריץ בקשה רגילה עם תקרת זמן ומחזיר איפה היא נתקעה
     const id = p0.ApiCallId || 'dbg';
