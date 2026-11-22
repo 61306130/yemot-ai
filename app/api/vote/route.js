@@ -33,6 +33,17 @@ const WAIT = 15; // שניות להקשה
 const MAX_SILENT = 3; // כמה פעמים בלי הקשה לפני ניתוק
 
 async function handle(request) {
+  const p0 = Object.fromEntries(new URL(request.url).searchParams);
+  if (p0.dbg) {
+    // אבחון זמני: מריץ בקשה רגילה עם תקרת זמן ומחזיר איפה היא נתקעה
+    const id = p0.ApiCallId || 'dbg';
+    const r = await Promise.race([handle2(request).then((x) => x.text()), new Promise((res) => setTimeout(() => res('TIMEOUT'), 20000))]);
+    return Response.json({ result: String(r).slice(0, 300), laps: (globalThis.__voteLaps || {})[id] || [] });
+  }
+  return handle2(request);
+}
+
+async function handle2(request) {
   const p = await readParams(request);
   if (p.hangup === 'yes') return reply('', 'הצבעה');
   const callId = p.ApiCallId || 'x';
@@ -47,7 +58,9 @@ async function handle(request) {
     reply(`id_list_message=${await speak(text, opts)}&go_to_folder=hangup`);
 
   const T0 = Date.now();
-  const lap = (m) => console.log(`vote ${callId} +${Date.now() - T0}ms ${m}`);
+  const laps = (globalThis.__voteLaps ||= {});
+  laps[callId] = [];
+  const lap = (m) => { const line = `+${Date.now() - T0}ms ${m}`; laps[callId].push(line); console.log(`vote ${callId} ${line}`); };
   try {
     const cfg = await getConfig();
     lap('config');
