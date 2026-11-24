@@ -1151,7 +1151,71 @@ function Voting({ api, notify }) {
           {cands.length < 30 && <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={addRow}>+ הוסף מתמודד</button>}
         </div>
       </div>
+      <Voters api={api} />
     </>
+  );
+}
+
+/* מי הצביע למי - לפי סבב (כולל סבבים קודמים שאופסו) */
+function Voters({ api }) {
+  const [round, setRound] = useState('');
+  const [d, reload, err] = useLoad(() => api(`voting/voters${round ? '?round=' + round : ''}`), [api, round]);
+  const [q, setQ] = useState('');
+  const [cand, setCand] = useState('');
+  const list = (d?.voters || [])
+    .filter((v) => !cand || String(v.candidate_num) === cand)
+    .filter((v) => !q || `${v.phone} ${v.voter_name} ${v.candidate_name}`.includes(q.trim()));
+  const cands = [...new Map((d?.voters || []).map((v) => [v.candidate_num, v.candidate_name])).entries()].sort((a, b) => a[0] - b[0]);
+  const csv = () => {
+    const rows = [['זמן', 'טלפון', 'שם המצביע', 'מספר מתמודד', 'מתמודד'],
+      ...list.map((v) => [new Date(v.created_at).toLocaleString('he-IL'), v.phone, v.voter_name, v.candidate_num, v.candidate_name])];
+    const text = '\uFEFF' + rows.map((r) => r.map((x) => `"${String(x ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    a.download = `votes-round-${d?.round || ''}.csv`;
+    a.click();
+  };
+  return (
+    <div className="card glass" style={{ marginTop: 16 }}>
+      <div className="ch">
+        <div><h3>מי הצביע למי</h3><p>{d ? `סבב ${d.round}${d.round === d.currentRound ? ' (נוכחי)' : ''} · ${list.length} קולות` : ''}</p></div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn ghost sm" onClick={reload}>רענון</button>
+          <button className="btn sm" onClick={csv} disabled={!list.length}>הורדה לאקסל</button>
+        </div>
+      </div>
+      {err ? <Empty text={err} /> : !d ? <Loading /> : (
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <select className="inp" style={{ width: 'auto' }} value={round || d.round} onChange={(e) => setRound(e.target.value)}>
+              {(d.rounds.length ? d.rounds : [{ round: d.round, votes: 0 }]).map((r) => (
+                <option key={r.round} value={r.round}>
+                  סבב {r.round}{r.round === d.currentRound ? ' (נוכחי)' : ''} · {r.votes} קולות{r.last_at ? ` · ${new Date(r.last_at).toLocaleDateString('he-IL')}` : ''}
+                </option>
+              ))}
+            </select>
+            <select className="inp" style={{ width: 'auto' }} value={cand} onChange={(e) => setCand(e.target.value)}>
+              <option value="">כל המתמודדים</option>
+              {cands.map(([n, name]) => <option key={n} value={n}>{n}. {name}</option>)}
+            </select>
+            <input className="inp" style={{ flex: 1, minWidth: 180 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי טלפון או שם" />
+          </div>
+          {!list.length ? <Empty icon="🗳️" text="אין קולות בסבב הזה" /> : (
+            <div className="rows" style={{ maxHeight: 480, overflowY: 'auto' }}>
+              {list.map((v) => (
+                <div className="row" key={v.phone}>
+                  <div className="av">{v.candidate_num}</div>
+                  <div style={{ flex: 1 }}>
+                    <div className="nm">{v.voter_name || fmtPhone(v.phone)} → {v.candidate_name || `מתמודד ${v.candidate_num}`}</div>
+                    <div className="mt">{v.voter_name ? fmtPhone(v.phone) + ' · ' : ''}{new Date(v.created_at).toLocaleString('he-IL')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

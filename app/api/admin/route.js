@@ -9,6 +9,7 @@ import { runPodcast } from '../../../lib/podcast.js';
 import { getBulletin, refreshBulletin } from '../../../lib/news.js';
 import {
   getConfig, getCandidates, setCandidate, clearCandidates, setOpen, setTitle, resetVotes, resetAll, getResults,
+  getVoters,
 } from '../../../lib/voting.js';
 import { say, speakToPath, previewVoice, cloudTtsUsage } from '../../../lib/voice.js';
 import { runCleanup } from '../../../lib/cleanup.js';
@@ -146,6 +147,9 @@ async function handle(request, ctx) {
     if (path === 'voting' && method === 'GET') {
       const { config, results, total } = await getResults();
       return json({ config, candidates: await getCandidates(), results, total });
+    }
+    if (path === 'voting/voters' && method === 'GET') {
+      return json(await getVoters(new URL(request.url).searchParams.get('round')));
     }
     if (path === 'voting/candidates' && method === 'POST') {
       const { candidates } = await body(request); // [{num,name}] - מחליף את כל הרשימה
