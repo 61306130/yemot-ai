@@ -16,7 +16,7 @@ import { runCleanup } from '../../../lib/cleanup.js';
 import { warmVoting } from '../../../lib/voting-voice.js';
 import { bg } from '../../../lib/bg.js';
 import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
-import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems, refreshAllSystems } from '../../../lib/systems.js';
+import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems, refreshAllSystems, renewSystemAddress } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -76,6 +76,16 @@ async function handle(request, ctx) {
     if (path === 'systems/refresh-all' && method === 'POST') {
       const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
       return json({ results: await refreshAllSystems({ baseUrl, speakMenu: speakToPath, limit: 30 }) });
+    }
+    if (path === 'systems/renew' && method === 'POST') {
+      const { did } = await body(request);
+      const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
+      return json(await renewSystemAddress(String(did), { baseUrl, speakMenu: speakToPath }));
+    }
+    if (path === 'systems/cf' && method === 'GET') {
+      const { cfAccounts, cfEnabled } = await import('../../../lib/cfworkers.js');
+      const accs = cfEnabled ? await cfAccounts(true).catch((e) => ({ error: e.message })) : [];
+      return json({ enabled: cfEnabled, accounts: Array.isArray(accs) ? accs.map(({ token, ...a }) => a) : [], error: accs.error });
     }
     if (path === 'systems/delete' && method === 'POST') {
       await deleteSystem(String((await body(request)).did));

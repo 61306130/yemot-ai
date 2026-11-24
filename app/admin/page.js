@@ -548,6 +548,30 @@ function CallerRow({ c, onSave }) {
 /* ============================ הגדרות הבוט ============================ */
 /* ============================ מערכות של משתמשים ============================ */
 /* לשונית מערכות: המערכות שחוברו + התפריט הראשי של הקו */
+function CfAccounts({ api }) {
+  const [d] = useLoad(() => api('systems/cf'), [api]);
+  if (!d) return null;
+  return (
+    <div className="card glass" style={{ marginBottom: 16 }}>
+      <div className="ch"><div><h3>כתובות נפרדות (Cloudflare)</h3>
+        <p>{!d.enabled ? 'לא מחובר - חסר CLOUDFLARE_API_TOKEN' : d.error ? d.error : `${d.accounts.length} חשבונות · כל מערכת מקבלת כתובת משלה`}</p></div></div>
+      {d.enabled && d.accounts.length > 0 && (
+        <div className="rows">
+          {d.accounts.map((a) => (
+            <div className="row" key={a.id}>
+              <div className="av">☁️</div>
+              <div style={{ flex: 1 }}>
+                <div className="nm" style={{ direction: 'ltr', textAlign: 'right' }}>{a.subdomain ? `*.${a.subdomain}.workers.dev` : 'אין סיומת workers.dev - צריך להגדיר ב-Cloudflare'}</div>
+                <div className="mt">{a.name} · {a.workers} מתוך 100 Workers</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SystemsTab(props) {
   const [sub, setSub] = useState('list');
   return (
@@ -625,6 +649,7 @@ function Systems({ api, notify }) {
               </div>
             ))}
           </div>
+          <CfAccounts api={api} />
           {all.length > 0 && (
             <div className="card glass" style={{ marginBottom: 16 }}>
               <div className="ch"><div><h3>שיחות בכל המערכות</h3><p>14 הימים האחרונים</p></div></div>
@@ -685,12 +710,21 @@ function Systems({ api, notify }) {
                               ))}
                             </div>
                           )}
+                          <div className="mt" style={{ marginBottom: 8, direction: 'ltr', textAlign: 'right' }}>
+                            כתובת: <span style={{ fontFamily: 'monospace' }}>{x.worker_url || 'כתובת משותפת'}</span>
+                          </div>
                           <div className="mt" style={{ margin: '10px 0' }}>
                             הוקמה {new Date(x.created_at).toLocaleDateString('he-IL')} · סיסמה: <span style={{ fontFamily: 'monospace' }}>{show[x.did] ? x.password : '••••'}</span>{' '}
                             <a style={{ cursor: 'pointer', color: '#19d3ff' }} onClick={() => setShow((s) => ({ ...s, [x.did]: !s[x.did] }))}>{show[x.did] ? 'הסתר' : 'הצג'}</a>
                           </div>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             <button className="btn ghost sm" onClick={() => check(x.did)} disabled={!!busy}>{busy === x.did ? <span className="spin" /> : 'בדיקת תקינות'}</button>
+                            <button className="btn ghost sm" disabled={!!busy} onClick={async () => {
+                              if (!confirm(`לתת למערכת ${x.did} כתובת חדשה? הכתובת הנוכחית תפסיק לעבוד, והשלוחות יעודכנו לחדשה.`)) return;
+                              setBusy('renew' + x.did);
+                              try { const r = await api('systems/renew', { method: 'POST', body: { did: x.did } }); notify('כתובת חדשה: ' + (r.url || '')); reload(); } catch (e) { notify(e.message, 'err'); }
+                              setBusy('');
+                            }}>{busy === 'renew' + x.did ? <span className="spin" /> : 'כתובת חדשה'}</button>
                             <button className="btn ghost sm" onClick={() => act('systems/status', { did: x.did, status: x.status === 'active' ? 'disabled' : 'active' }, x.status === 'active' ? 'המערכת הושבתה' : 'המערכת הופעלה')}>
                               {x.status === 'active' ? 'השבתה' : 'הפעלה'}
                             </button>
