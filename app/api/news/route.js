@@ -38,6 +38,10 @@ async function handle(request) {
     const { dbDiag } = await import('../../../lib/dbdiag.js');
     return Response.json(await dbDiag(p.dbdiag === 'fix'));
   }
+  if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
+    const { diagnose } = await import('../../../lib/ai.js');
+    return Response.json(await diagnose());
+  }
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
   const sys = await resolveSystem(p, request).catch(() => ({}));
   if (sys.denied) return reply(`id_list_message=t-${sys.denied.replace(/[.,]/g, ' ')}&go_to_folder=hangup`);
