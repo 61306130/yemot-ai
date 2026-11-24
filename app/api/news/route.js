@@ -40,6 +40,10 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'tts') {
+      const v = await import('../../../lib/voice.js');
+      return Response.json({ tts: await v.testCloudTts(), vertex: (await ai.diagnose()).vertex });
+    }
     return Response.json(p.aidiag === 'groq' ? await ai.groqLimits() : await ai.diagnose());
   }
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
