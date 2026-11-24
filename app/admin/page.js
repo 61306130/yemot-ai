@@ -550,7 +550,7 @@ function CallerRow({ c, onSave }) {
 
 /* ============================ הגדרות הבוט ============================ */
 /* ============================ מערכות של משתמשים ============================ */
-const SVC_NAMES = { yemot: 'עוזר חכם', news: 'חדשות', transit: 'תחבורה', translate: 'תרגומון' };
+const SVC_NAMES = { yemot: 'בוטי', news: 'חדשות', transit: 'תחבורה', translate: 'תרגומון' };
 const HEALTH = {
   ok: ['תקינה', 'var(--ok)'],
   warn: ['לבדיקה', 'var(--warn)'],
@@ -842,6 +842,8 @@ function BotSettings({ api, notify }) {
         'voice.name': s['voice.name'], 'voice.enabled': s['voice.enabled'],
         'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'],
         'bot.dailyLimit': Math.max(0, Number(s['bot.dailyLimit']) || 0),
+        'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
+        'bot.music': s['bot.music'] !== false,
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -862,7 +864,7 @@ function BotSettings({ api, notify }) {
   ];
   return (
     <>
-      <Head title="הגדרות הבוט" sub="שלוחה 1 · התנהגות העוזר החכם" right={<button className="btn" onClick={save}>שמירה</button>} />
+      <Head title="הגדרות הבוט" sub="שלוחה 1 · התנהגות בוטי" right={<button className="btn" onClick={save}>שמירה</button>} />
       <div className="grid cols">
         <div className="card glass">
           <h3 style={{ marginBottom: 16 }}>טקסטים</h3>
@@ -892,8 +894,15 @@ function BotSettings({ api, notify }) {
             </select>
           </label>
           <label className="fld"><span className="lb">מקסימום שאלות לכל מתקשר ביום (0 = בלי הגבלה)</span>
-            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 40} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
+            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 20} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
           </label>
+          <label className="fld"><span className="lb">מקסימום שאלות ביום למי שפתח מערכת אישית</span>
+            <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimitOwner'] ?? 40} onChange={(e) => up('bot.dailyLimitOwner', e.target.value)} />
+          </label>
+          <div className="swrow">
+            <div className="tx"><b>מנגינה בזמן ההמתנה</b><span>מוזיקה קצרה בין השאלה לתשובה של בוטי</span></div>
+            <button className={`sw ${s['bot.music'] !== false ? 'on' : ''}`} onClick={() => up('bot.music', s['bot.music'] === false)} />
+          </div>
           <label className="fld"><span className="lb">מהירות דיבור: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
             <input type="range" min="-20" max="50" step="5" value={Number(s['voice.rate']) || 0}
               onChange={(e) => up('voice.rate', Number(e.target.value))} style={{ width: '100%', accentColor: '#7c5cff' }} />
@@ -905,7 +914,7 @@ function BotSettings({ api, notify }) {
   );
 }
 function VoicePreview({ api, notify, voice, rate }) {
-  const [t, setT] = useState('שלום, כאן העוזר החכם. אפשר לשאול אותי כל שאלה, ואני אשתדל לעזור.');
+  const [t, setT] = useState('שלום, כאן בוטי. אפשר לשאול אותי כל שאלה, ואני אשתדל לעזור.');
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
@@ -944,7 +953,7 @@ function MenuTab({ api, notify }) {
       <div className="card glass" style={{ maxWidth: 680 }}>
         <label className="fld"><span className="lb">טקסט התפריט</span>
           <textarea className="inp" style={{ minHeight: 170 }} value={text} onChange={(e) => setText(e.target.value)}
-            placeholder={'שלום. לעוזר החכם הקישו 1. לפודקאסט הקישו 2...'} /></label>
+            placeholder={'שלום. לבוטי, העוזר החכם, הקישו 1. לפודקאסט הקישו 2...'} /></label>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn" onClick={publish} disabled={busy || !text.trim()}>{busy ? <span className="spin" /> : 'צור והעלה לימות'}</button>
           <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>נשמר כקובץ M1000 בשלוחה הראשית</span>

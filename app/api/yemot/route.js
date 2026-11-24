@@ -7,7 +7,9 @@ import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js
 import { say, callFileName, plainTts } from '../../../lib/voice.js';
 import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
 import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
-import { resolveSystem, enterSystem, currentToken } from '../../../lib/systems.js';
+import { resolveSystem, enterSystem, currentToken, isSystemOwner } from '../../../lib/systems.js';
+import { waitUntil } from '@vercel/functions';
+import { holdMusic } from '../../../lib/music.js';
 
 // ניקוי שם שהמתקשר אמר ("שמי ישראל כהן" -> "ישראל כהן")
 function cleanName(t) {
@@ -66,24 +68,29 @@ const YEMOT_TOKEN = process.env.YEMOT_TOKEN;
 
 const SYSTEM_PROMPT =
   process.env.SYSTEM_PROMPT ||
-  `אתה "העוזר החכם" של קו טלפון: ידען, חם ומדויק, שמדבר בעברית טבעית בשיחת טלפון.
+  `אתה "בוטי", העוזר החכם של קו טלפון: ידען, חם ומדויק, שמדבר בעברית טבעית בשיחת טלפון.
 המטרה שלך: שהמתקשר ינתק עם תשובה שבאמת עזרה לו.
 
 איך לענות:
-- התאם את האורך לשאלה. שאלה פשוטה (עובדה, שעה, הגדרה) - תשובה ישירה במשפט עד שלושה. שאלה שדורשת הסבר, עצה, השוואה או הוראות - תשובה מלאה ומועילה, עד בערך עשרה משפטים.
+- הכי חשוב: אורך התשובה לפי השאלה, ובשיחת טלפון קצר עדיף. המאזין לא יכול לדלג, אז כל משפט מיותר מעיק.
+  - שאלה קצרה או פשוטה (עובדה, כן/לא, שעה, הגדרה, "מה זה", "כמה") - משפט אחד או שניים. בלי הקדמות, בלי רקע ובלי "חשוב לציין".
+  - שאלה שדורשת הסבר, עצה או השוואה - שלושה עד חמישה משפטים עם העיקר.
+  - רק כשמבקשים במפורש פירוט, הוראות שלב אחר שלב או "תסביר לעומק" - עד שמונה משפטים.
+  - אל תוסיף מידע שלא נשאלת עליו, ואל תסכם בסוף את מה שכבר אמרת.
 - פתח בתשובה העיקרית, ורק אחר כך פרטים והסבר. כמו אדם שמסביר בעל פה.
 - תן תוכן אמיתי: עובדות, מספרים, שמות, צעדים מעשיים ודוגמאות. לא משפטים כלליים ומתחמקים, ולא "תלוי" בלי להסביר במה זה תלוי.
 - כשנותנים הוראות או כמה אפשרויות, אמור אותן בסדר ברור: "ראשית... שנית... ולבסוף...".
 - ההקלטה מתומללת אוטומטית ועלולה להכיל שגיאות. נחש את הכוונה לפי ההקשר וענה. שאל שאלת הבהרה רק אם באמת אי אפשר להבין.
 - אם אינך יודע או לא בטוח - אמור זאת בכנות, ואל תמציא עובדות, מספרים או ציטוטים.
 - לעולם אל תמסור מהזיכרון מחיר, תעריף, שער, שעות פתיחה, לוח זמנים או נתון אחר שמשתנה עם הזמן. נתונים כאלה מוסרים רק אם מצאת אותם עכשיו בחיפוש.
-- אם הנושא רחב וקיצרת, סיים במשפט קצר שמציע להרחיב.
+- אם הנושא רחב וקיצרת, אפשר לסיים בשאלה קצרה כמו: רוצה שארחיב?
 
 ההקראה בקול:
 - בלי רשימות, כוכביות, אימוג'י, קישורים, סוגריים או סימנים מיוחדים.
 - מספרים קצרים כתוב במילים.
 
-ייתכן שההודעות הקודמות בשיחה הן משיחות טלפון קודמות עם אותו מתקשר. השתמש בהן כדי לזכור מה סיפר לך ועל מה דיברתם.`;
+ייתכן שההודעות הקודמות בשיחה הן משיחות טלפון קודמות עם אותו מתקשר. השתמש בהן כדי לזכור מה סיפר לך ועל מה דיברתם.
+כשאתה פונה למתקשר בשמו - רק בשם הפרטי.`;
 
 // הוראה לשלב הראשון: להחליט אם צריך חיפוש באינטרנט
 const SEARCH_RULE = `
@@ -209,6 +216,12 @@ async function handle(request) {
     .sort((a, b) => a - b);
   const n = recs.length ? recs[recs.length - 1] : 0;
 
+  // תשובה להודעת המגבלה היומית: 1 = לפתיחת מערכת אישית (שלוחת הכוכבית), אחרת חזרה לתפריט
+  if (p.lim !== undefined) {
+    const folder = (await getSettings().catch(() => ({})))['bot.upgradeFolder'] || '/Star';
+    return reply(p.lim === '1' ? `go_to_folder=${folder}` : 'go_to_folder=/');
+  }
+
   // רישום שם (שיחה ראשונה) - יש תשובות לשלב השם ועוד אין שאלות
   if (n === 0 && hasDb && Object.keys(p).some((k) => /^(nm|nc)\d+$/.test(k))) {
     try {
@@ -222,7 +235,7 @@ async function handle(request) {
   // כניסה לשלוחה: זיהוי המתקשר, הודעת פתיחה ובקשת הקלטה ראשונה
   if (n === 0) {
     const cfg = await getSettings().catch(() => ({}));
-    let greeting = cfg['bot.greeting'] || 'שלום. אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
+    let greeting = cfg['bot.greeting'] || 'שלום, כאן בוטי. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
     if (hasDb) {
       try {
         const { caller, previousMessages } = await startCall(callId, phone);
@@ -234,15 +247,17 @@ async function handle(request) {
           await saveState(`name-${callId}`, { stage: 'name', tries: 1 });
           return reply(
             recordAs(
-              [await say('שלום וברוכים הבאים לעוזר החכם! לפני שנתחיל, נשמח להכיר. אמרו את השם הפרטי ושם המשפחה שלכם אחרי הצליל, ובסיום הקישו סולמית', { cache: true })],
+              [await say('שלום וברוכים הבאים, כאן בוטי! לפני שנתחיל, נשמח להכיר. אמרו את השם הפרטי ושם המשפחה שלכם אחרי הצליל, ובסיום הקישו סולמית', { cache: true })],
               'nm1'
             )
           );
         }
-        if (previousMessages === 0 && caller.name) {
-          greeting = `שלום ${caller.name}! אני העוזר החכם. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית`;
+        // פונים בשם הפרטי בלבד (המילה הראשונה של השם שנרשם)
+        const first = String(caller.name || '').trim().split(/\s+/)[0] || '';
+        if (previousMessages === 0 && first) {
+          greeting = `שלום ${first}! כאן בוטי. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית`;
         } else if (previousMessages > 0) {
-          const name = caller.name ? ` ${caller.name}` : '';
+          const name = first ? ` ${first}` : '';
           greeting = `שלום${name}, טוב לשמוע ממך שוב. אני זוכר על מה דיברנו. אפשר להמשיך מאיפה שעצרנו או לשאול משהו חדש. דבר אחרי הצליל ובסיום הקש סולמית`;
         }
       } catch (e) {
@@ -252,17 +267,32 @@ async function handle(request) {
     return reply(recordRead(await say(greeting, { cache: true }), 1));
   }
 
+  // מגבלת שאלות יומית לכל מתקשר: רגיל 20, ומי שפתח מערכת משלו 40
   try {
-    // מגבלת שאלות יומית לכל מתקשר - כדי שאדם אחד לא יגמור את המכסה לכולם
-    const limit = Number((await getSettings().catch(() => ({})))['bot.dailyLimit']) || 0;
-    if (limit > 0 && hasDb && !phone.startsWith('hidden')) {
+    const cfgL = await getSettings().catch(() => ({}));
+    const baseLimit = Number(cfgL['bot.dailyLimit']) || 0;
+    if (baseLimit > 0 && hasDb && !phone.startsWith('hidden') && !(await loadState(`q:${callId}:${n}`).catch(() => null))) {
+      const owner = await isSystemOwner(phone);
+      const ownerLimit = Number(cfgL['bot.dailyLimitOwner']) || 40;
+      const limit = owner ? Math.max(baseLimit, ownerLimit) : baseLimit;
       const [{ n: today }] = await sql`select count(*)::int as n from messages
         where phone = ${phone} and role = 'user' and created_at > date_trunc('day', now() at time zone 'Asia/Jerusalem') at time zone 'Asia/Jerusalem'`.catch(() => [{ n: 0 }]);
       if (today >= limit) {
-        return reply(`id_list_message=${await say(`הגעת למספר השאלות המקסימלי להיום, ${limit} שאלות. אפשר לחזור ולשאול מחר. להתראות!`, { cache: true })}&go_to_folder=hangup`);
+        if (owner) {
+          return reply(`id_list_message=${await say(`הגעת למספר השאלות המקסימלי להיום, ${limit} שאלות. אפשר לחזור ולשאול מחר. להתראות!`, { cache: true })}&go_to_folder=/`);
+        }
+        return reply(tapRead([await say(
+          `הגעתם למגבלה היומית של ${limit} שאלות. כדי להרחיב את המגבלה ל-${ownerLimit} שאלות ביום, אפשר לפתוח מערכת אישית בחינם. ` +
+          'לפתיחה וחיבור, הקישו 1. לחזרה לתפריט, הקישו 2 או המתינו.', { cache: true })], 'lim', 8));
       }
     }
+  } catch (e) {
+    console.error('מגבלה יומית:', e?.message);
+  }
 
+  // עיבוד השאלה. עם מנגינה: התשובה מוכנה ברקע, ובינתיים המתקשר שומע מנגינה (ראו musicGate)
+  const runQuestion = async () => {
+  try {
     const audio = await downloadRecording(p[`rec${n}`], p.ApiExtension);
 
     let history = memory.get(callId) || [];
@@ -337,11 +367,56 @@ async function handle(request) {
   } catch (err) {
     if (err?.busy) {
       logError('ai-busy', err);
-      return reply(`id_list_message=${await say('יש כרגע עומס גדול על העוזר החכם. נסו שוב בעוד כמה דקות. תודה על הסבלנות!', { cache: true })}&go_to_folder=/`);
+      return reply(`id_list_message=${await say('יש כרגע עומס גדול על בוטי. נסו שוב בעוד כמה דקות. תודה על הסבלנות!', { cache: true })}&go_to_folder=/`);
     }
     logError('ai-call', err);
     return reply(recordRead(await say('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', { cache: true }), n + 1));
   }
+  };
+
+  const cfgM = await getSettings().catch(() => ({}));
+  if (cfgM['bot.music'] === false) return runQuestion();
+  return musicGate(`q:${callId}:${n}`, runQuestion);
+}
+
+// מנגינה בזמן ההמתנה: הבקשה הראשונה מתחילה לעבד ברקע ומחזירה מנגינה קצרה.
+// אחרי המנגינה ימות פונה שוב לשרת (עם אותם פרמטרים) - ואז מחזירים את התשובה אם היא מוכנה,
+// מחכים לה עוד כמה שניות, או משמיעים מנגינה נוספת.
+async function musicGate(jobKey, runQuestion) {
+  const job = await loadState(jobKey).catch(() => null);
+  if (!job) {
+    await saveState(jobKey, { status: 'working', at: Date.now() });
+    const work = (async () => {
+      let text;
+      try {
+        text = await (await runQuestion()).text();
+      } catch (e) {
+        text = recordRead(await say('סליחה, הייתה תקלה. נסה לשאול שוב אחרי הצליל', { cache: true }), 1);
+      }
+      await saveState(jobKey, { status: 'done', reply: text, at: Date.now() });
+    })();
+    waitUntil(work);
+    const music = await holdMusic().catch(() => null);
+    if (!music) { await work; const j = await loadState(jobKey); return reply(j?.reply || ''); } // בלי מנגינה - כמו פעם
+    return reply(`id_list_message=${music}`);
+  }
+  if (job.status === 'done') return reply(job.reply);
+  // עדיין עובד: מחכים עד ~8 שניות לתשובה
+  for (let i = 0; i < 16; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const j = await loadState(jobKey).catch(() => null);
+    if (j?.status === 'done') return reply(j.reply);
+  }
+  // העבודה ברקע נתקעה/נעצרה - עושים אותה כאן
+  if (Date.now() - job.at > 45000) {
+    await saveState(jobKey, { status: 'working', at: Date.now() });
+    const res = await runQuestion();
+    const text = await res.text();
+    await saveState(jobKey, { status: 'done', reply: text, at: Date.now() });
+    return reply(text);
+  }
+  const music = await holdMusic().catch(() => null);
+  return reply(music ? `id_list_message=${music}` : 'id_list_message=t-רק עוד רגע');
 }
 
 export const GET = handle;
