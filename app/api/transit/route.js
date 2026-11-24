@@ -5,7 +5,7 @@ import { reply, readParams, tapRead, recordRead, downloadRecording } from '../..
 import { say, callFileName } from '../../../lib/voice.js';
 import { transcribeBoth, answer as aiAnswer } from '../../../lib/ai.js';
 import {
-  loadTrip, saveTrip, deleteTrip, listPlaces, savePlace, geocode, planTrip,
+  loadTrip, saveTrip, deleteTrip, listPlaces, savePlace, geocode, planTrip, logSearch,
   buildSteps, nextArrival, arrivalText, hhmm,
 } from '../../../lib/transit.js';
 import { logError } from '../../../lib/store.js';
@@ -89,6 +89,7 @@ async function handle(request) {
         await saveTrip(phone, trip);
         return reply(recordRead([await dyn(result.say), await fixed('לנסיעה, אמור מאיפה לאיפה אחרי הצליל, ובסיום הקש סולמית')], next));
       }
+      logSearch(phone, result).catch(() => {}); // ללוג החיפושים באתר
       trip = {
         pending: 'choose', options: result.options,
         dest: result.to.name, origin: result.from.name,
@@ -288,7 +289,7 @@ async function search(rec, ext, phone) {
     const whenNote = plan.when ? ' בזמן שביקשת' : ' בשעות הקרובות';
     return { say: `לא מצאתי מסלול בתחבורה ציבורית מ${from.name} אל ${to.name}${whenNote}.` };
   }
-  return { from, to, options };
+  return { from, to, options, said: versions[0]?.[1] || '' };
 }
 
 // הפיכת תיאור הזמן מה-AI ל-{ when: Date, arriveBy }

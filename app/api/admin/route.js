@@ -143,6 +143,10 @@ async function handle(request, ctx) {
       return json({ bulletin: b });
     }
 
+    if (path === 'transit/log' && method === 'GET') {
+      const { transitLog } = await import('../../../lib/transit.js');
+      return json({ log: await transitLog() });
+    }
     // ----- הצבעה -----
     if (path === 'voting' && method === 'GET') {
       const { config, results, total } = await getResults();

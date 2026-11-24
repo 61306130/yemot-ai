@@ -281,10 +281,7 @@ function Login({ onIn }) {
 /* ---------------- לוח ---------------- */
 const TABS = [
   ['overview', 'סקירה', I.grid],
-  ['calls', 'שיחות', I.phone],
-  ['callers', 'מתקשרים', I.users],
   ['bot', 'בוט AI', I.bot],
-  ['menu', 'תפריט ראשי', I.menu],
   ['news', 'חדשות', I.news],
   ['podcast', 'פודקאסט', I.mic],
   ['transit', 'תחבורה', I.route],
@@ -307,8 +304,8 @@ function Dash({ onLogout }) {
     api('overview').then((d) => setErrCount(d?.totals?.errors24h || 0)).catch(() => {});
   }, [api]);
 
-  const Section = { overview: Overview, calls: Calls, callers: Callers, bot: BotTab, systems: Systems,
-    menu: MenuTab, news: NewsTab, podcast: Podcast, transit: Transit, voting: Voting, system: System }[tab];
+  const Section = { overview: Overview, bot: BotTab, systems: SystemsTab,
+    news: NewsTab, podcast: Podcast, transit: Transit, voting: Voting, system: System }[tab];
 
   return (
     <div className="shell">
@@ -550,6 +547,20 @@ function CallerRow({ c, onSave }) {
 
 /* ============================ הגדרות הבוט ============================ */
 /* ============================ מערכות של משתמשים ============================ */
+/* לשונית מערכות: המערכות שחוברו + התפריט הראשי של הקו */
+function SystemsTab(props) {
+  const [sub, setSub] = useState('list');
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        <button className={`btn sm ${sub === 'list' ? '' : 'ghost'}`} onClick={() => setSub('list')}>מערכות שחוברו</button>
+        <button className={`btn sm ${sub === 'menu' ? '' : 'ghost'}`} onClick={() => setSub('menu')}>התפריט הראשי</button>
+      </div>
+      {sub === 'list' ? <Systems {...props} /> : <MenuTab {...props} />}
+    </>
+  );
+}
+
 const SVC_NAMES = { yemot: 'בוטי', news: 'חדשות', transit: 'תחבורה', translate: 'תרגומון' };
 const HEALTH = {
   ok: ['תקינה', 'var(--ok)'],
@@ -1036,21 +1047,101 @@ function Podcast({ api, notify }) {
 }
 
 /* ============================ תחבורה ============================ */
-function Transit() {
+/* מפה (Leaflet + OpenStreetMap), נטענת פעם אחת מ-CDN */
+function useLeaflet() {
+  const [L, setL] = useState(typeof window !== 'undefined' ? window.L : null);
+  useEffect(() => {
+    if (window.L) { setL(window.L); return; }
+    if (!document.getElementById('leaflet-css')) {
+      const css = document.createElement('link');
+      css.id = 'leaflet-css'; css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(css);
+    }
+    const js = document.createElement('script');
+    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload = () => setL(window.L);
+    document.body.appendChild(js);
+  }, []);
+  return L;
+}
+
+function TripMap({ items, focus }) {
+  const L = useLeaflet();
+  const box = useRef(null);
+  const map = useRef(null);
+  const layer = useRef(null);
+  useEffect(() => {
+    if (!L || !box.current) return;
+    if (!map.current) {
+      map.current = L.map(box.current, { zoomControl: true, attributionControl: true }).setView([31.7, 35.0], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map.current);
+    }
+    if (layer.current) layer.current.remove();
+    layer.current = L.layerGroup().addTo(map.current);
+    const shown = (focus ? [focus] : items).filter((x) => x.from_lat && x.to_lat);
+    const bounds = [];
+    shown.forEach((x, i) => {
+      const a = [x.from_lat, x.from_lon], b = [x.to_lat, x.to_lon];
+      const hot = focus || i === 0;
+      L.polyline([a, b], { color: hot ? '#7c5cff' : '#19d3ff', weight: hot ? 5 : 3, opacity: hot ? 0.95 : 0.45, dashArray: hot ? null : '6 6' }).addTo(layer.current);
+      L.circleMarker(a, { radius: hot ? 8 : 5, color: '#22c55e', fillOpacity: 1 }).bindTooltip('מ: ' + x.from_name).addTo(layer.current);
+      const eta = x.best_minutes ? `${x.best_minutes} דק'` : '';
+      L.circleMarker(b, { radius: hot ? 8 : 5, color: '#ff4d8d', fillOpacity: 1 })
+        .bindTooltip(`אל: ${x.to_name}${eta ? ' · ' + eta : ''}`, { permanent: !!focus, direction: 'top' }).addTo(layer.current);
+      bounds.push(a, b);
+    });
+    if (bounds.length) map.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    setTimeout(() => map.current && map.current.invalidateSize(), 50);
+  }, [L, items, focus]);
+  return <div ref={box} style={{ height: 380, borderRadius: 16, overflow: 'hidden', background: 'var(--panel2)' }} />;
+}
+
+function Transit({ api }) {
+  const [d, reload, err] = useLoad(() => api('transit/log'), [api]);
+  const [focus, setFocus] = useState(null);
+  const items = d?.log || [];
+  const hhmm = (t) => (t ? new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '');
+  const today = items.filter((x) => Date.now() - new Date(x.created_at) < 864e5).length;
   return (
     <>
-      <Head title="תחבורה ציבורית" sub="שלוחה 3" />
-      <div className="card glass">
-        <div className="rows">
-          <div className="row"><div className="av">🗺️</div><div><div className="nm">תכנון מסלולים</div><div className="mt">מקור: Transitous (נתוני משרד התחבורה)</div></div><div className="end"><span className="tag ok">פעיל</span></div></div>
-          <div className="row"><div className="av">⏱️</div><div><div className="nm">זמני הגעה בזמן אמת</div><div className="mt">מקור: curlbus · גיבוי: לוח זמנים</div></div><div className="end"><span className="tag ok">פעיל</span></div></div>
-          <div className="row"><div className="av">⭐</div><div><div className="nm">מקומות שמורים</div><div className="mt">המתקשרים שומרים כתובות בעצמם בשיחה</div></div><div className="end"><span className="tag ok">פעיל</span></div></div>
-        </div>
-        <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: 'var(--panel2)', color: 'var(--muted)', fontSize: 13, lineHeight: 1.7 }}>
-          השלוחה מזהה מקומות לפי שם ועיר, מציעה עד 4 מסלולים ממוינים לפי נוחות, מלווה שלב אחר שלב עם זמני הגעה,
-          ומאפשרת לנתק ולחזור באמצע הנסיעה. בסיום מוצעת נסיעה חזרה.
-        </div>
-      </div>
+      <Head title="תחבורה ציבורית" sub="שלוחה 3 · החיפושים האחרונים על המפה" right={<button className="btn ghost sm" onClick={reload}>רענון</button>} />
+      {err ? <div className="card glass"><Empty text={err} /></div> : !d ? <Loading /> : (
+        <>
+          <div className="grid stats" style={{ marginBottom: 16 }}>
+            <div className="stat glass"><div className="v" style={{ color: 'var(--a1)' }}>{today}</div><div className="l">חיפושים ב-24 שעות</div></div>
+            <div className="stat glass"><div className="v" style={{ color: 'var(--a2)' }}>{items.length}</div><div className="l">בלוג</div></div>
+            <div className="stat glass"><div className="v" style={{ color: 'var(--a3)' }}>{items.length ? Math.round(items.filter((x) => x.best_minutes).reduce((a, x) => a + x.best_minutes, 0) / Math.max(1, items.filter((x) => x.best_minutes).length)) : 0}</div><div className="l">דק' נסיעה בממוצע</div></div>
+            <div className="stat glass"><div className="v" style={{ color: 'var(--ok)' }}>{new Set(items.map((x) => x.phone)).size}</div><div className="l">מתקשרים שונים</div></div>
+          </div>
+          <div className="card glass" style={{ marginBottom: 16 }}>
+            <div className="ch"><div><h3>{focus ? `${focus.from_name} ← ${focus.to_name}` : 'מפת החיפושים'}</h3>
+              <p>{focus ? `${focus.best_minutes ? `צפי ${focus.best_minutes} דק'` : ''}${focus.best_start ? ` · יציאה ${hhmm(focus.best_start)} · הגעה ${hhmm(focus.best_end)}` : ''}${focus.best_summary ? ` · ${focus.best_summary}` : ''}` : 'הקו הסגול - החיפוש האחרון. לחצו על חיפוש ברשימה כדי לראות אותו על המפה'}</p></div>
+              {focus && <button className="btn ghost sm" onClick={() => setFocus(null)}>כל החיפושים</button>}</div>
+            <TripMap items={items.slice(0, 30)} focus={focus} />
+          </div>
+          <div className="card glass">
+            <div className="ch"><div><h3>חיפושים אחרונים</h3><p>מה המתקשרים ביקשו ומה הוצע להם</p></div></div>
+            {!items.length ? <Empty icon="🚌" text="עוד אין חיפושים. החיפושים יופיעו כאן מהחיפוש הבא בשלוחה" /> : (
+              <div className="rows">
+                {items.map((x) => (
+                  <div className="row" key={x.id} style={{ cursor: 'pointer', outline: focus?.id === x.id ? '2px solid #7c5cff' : 'none', borderRadius: 12 }} onClick={() => setFocus(x)}>
+                    <div className="av" style={{ background: 'linear-gradient(135deg,#7c5cff,#19d3ff)' }}>🚌</div>
+                    <div style={{ flex: 1 }}>
+                      <div className="nm">{x.from_name} ← {x.to_name}</div>
+                      <div className="mt">
+                        {x.best_minutes ? <b style={{ color: '#19d3ff' }}>{x.best_minutes} דק' </b> : 'לא נמצא מסלול '}
+                        {x.best_start ? `· יציאה ${hhmm(x.best_start)} · הגעה ${hhmm(x.best_end)} ` : ''}
+                        {x.best_summary ? `· ${x.best_summary} ` : ''}{x.options_count > 1 ? `· ${x.options_count} אפשרויות` : ''}
+                      </div>
+                      <div className="mt" style={{ opacity: 0.75 }}>{x.caller_name || fmtPhone(x.phone)} · {timeAgo(x.created_at)}{x.said ? ` · "${x.said}"` : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
