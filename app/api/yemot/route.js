@@ -4,7 +4,7 @@
 
 import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
 import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
-import { say, callFileName } from '../../../lib/voice.js';
+import { say, callFileName, plainTts } from '../../../lib/voice.js';
 import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
 import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
 import { resolveSystem, enterSystem, currentToken } from '../../../lib/systems.js';
@@ -172,6 +172,7 @@ async function downloadRecording(value, extension) {
 }
 
 async function handle(request) {
+  const T0 = Date.now();
   const url = new URL(request.url);
   const p = Object.fromEntries(url.searchParams);
   if (request.method === 'POST') {
@@ -274,7 +275,7 @@ async function handle(request) {
     }
 
     const { text: transcript, provider: sttBy } = await transcribe(audio);
-    const deadline = Date.now() + 22000; // זמן כולל לתשובה, כדי שימות לא תנתק
+    const deadline = Date.now() + 14000; // זמן כולל לתשובה (AI), כדי שימות לא תנתק עם "שגיאה בשרת API"
     if (!transcript) {
       return reply(recordRead(await say('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל, ובסיום הקש סולמית', { cache: true }), n + 1));
     }
@@ -311,7 +312,8 @@ async function handle(request) {
         console.error('חיפוש לא זמין, עונה בלי אינטרנט:', String(e?.message || e).slice(0, 200));
         ({ text: answer, provider: aiBy } = await aiAnswer(
           BASE + '\nכרגע אין לך גישה לאינטרנט. אמור בקצרה שאינך יכול לבדוק מידע עדכני כרגע, וענה כמיטב ידיעתך אם אפשר. אל תענה במילה SEARCH.\n\n' + nowText(),
-          convo
+          convo,
+          deadline + 3000
         ));
       }
     }
@@ -325,8 +327,10 @@ async function handle(request) {
     }
 
     // התשובה בקול טבעי (קובץ קבוע לכל שיחה), והשאלה הבאה מהמטמון
+    // אם הקול הטבעי לא מוכן בזמן (שירות הקול איטי / כבר עבר הרבה זמן) - ימות מקריאה בעצמה, בלי ניתוק
+    const left = Math.max(1500, 20000 - (Date.now() - T0));
     const [answerMsg, nextMsg] = await Promise.all([
-      say(answer, { name: callFileName(callId, n) }),
+      Promise.race([say(answer, { name: callFileName(callId, n) }), new Promise((r) => setTimeout(() => r(plainTts(answer)), left))]),
       say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
     ]);
     return reply(`id_list_message=${answerMsg}&` + recordRead(nextMsg, n + 1));
