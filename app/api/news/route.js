@@ -54,6 +54,15 @@ async function handle(request) {
       const systems = await refreshAllSystems({ baseUrl, speakMenu: v.speakToPath, limit: 30 });
       return Response.json({ menuText: st['menu.text'], main, systems });
     }
+    if (p.aidiag === 'last') {
+      const { sql } = await import('../../../lib/db.js');
+      const msgs = await sql`select role, text, created_at from messages order by id desc limit ${Number(p.n) || 16}`;
+      const errs = await sql`select source, message, created_at from error_log where created_at > now() - interval '3 hours' order by created_at desc limit 30`;
+      const { getSettings } = await import('../../../lib/store.js');
+      const st = await getSettings();
+      return Response.json({ settings: { niqqud: st['bot.niqqud'], nakdan: st['voice.nakdan'], voice: st['voice.name'], rate: st['voice.rate'], vertex: st['bot.vertex'] },
+        msgs: msgs.reverse(), errs: errs.map((e) => ({ ...e, message: e.message.split('\n')[0].slice(0, 300) })) });
+    }
     if (p.aidiag === 'nakdan') {
       const { nakdanTest } = await import('../../../lib/nakdan.js');
       return Response.json(await nakdanTest(p.q || undefined));
