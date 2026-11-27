@@ -925,6 +925,7 @@ function BotSettings({ api, notify }) {
         'bot.dailyLimit': Math.max(0, Number(s['bot.dailyLimit']) || 0),
         'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
         'bot.music': s['bot.music'] !== false,
+        'bot.vertex': s['bot.vertex'] !== false,
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -960,6 +961,10 @@ function BotSettings({ api, notify }) {
           <div className="swrow">
             <div className="tx"><b>חיפוש באינטרנט</b><span>עונה על שאלות עדכניות (חדשות, מזג אוויר)</span></div>
             <button className={`sw ${s['bot.search'] ? 'on' : ''}`} onClick={() => up('bot.search', !s['bot.search'])} />
+          </div>
+          <div className="swrow">
+            <div className="tx"><b>Gemini המתקדם (Vertex)</b><span>עונה ראשון, הכי חכם ומהיר. בערך עשירית סנט לתשובה מקרדיט הניסיון של גוגל. כבוי = Gemini החינמי ו-Groq בלבד</span></div>
+            <button className={`sw ${s['bot.vertex'] !== false ? 'on' : ''}`} onClick={() => up('bot.vertex', s['bot.vertex'] === false)} />
           </div>
           <div className="swrow">
             <div className="tx"><b>ניקוד בתשובות</b><span>ה-AI מנקד מילים שעלולות להיקרא לא נכון</span></div>
@@ -1403,7 +1408,7 @@ function System({ api, notify }) {
       <Head title="מצב המערכת" sub="שגיאות וצריכת ספקים" right={<button className="btn ghost sm" onClick={() => { reloadE(); reloadU(); }}>רענון</button>} />
       <div className="grid cols">
         <div className="card glass">
-          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד{u ? ` · ${u.geminiKeys || 0} מפתחות Gemini פעילים${u.groq ? ' · Groq מחובר' : ''}${u.tts?.keys ? ` · קול Chirp החודש: ${u.tts.chars.map((c, i) => `מפתח ${i + 1}: ${Math.round((c || 0) / 1000)} אלף תווים (${Math.round((u.tts.free || 0) / 1000)} אלף חינם)`).join(', ')}` : ''}${u.tts?.credit?.on ? ` · קרדיט Google Cloud: נוצלו ${u.tts.credit.spentUsd.toFixed(2)}$ מתוך ${u.tts.credit.capUsd}$` : ''}` : ''}</p></div></div>
+          <div className="ch"><div><h3>שימוש בספקי AI היום</h3><p>כמה פעמים כל ספק עבד{u ? ` · ${u.geminiKeys || 0} מפתחות Gemini פעילים${u.groq ? ` · ${u.groq} מפתחות Groq` : ''}${u.tts?.keys ? ` · קול Chirp החודש: ${u.tts.chars.map((c, i) => `מפתח ${i + 1}: ${Math.round((c || 0) / 1000)} אלף תווים (${Math.round((u.tts.free || 0) / 1000)} אלף חינם)`).join(', ')}` : ''}${u.tts?.credit?.on ? ` · קרדיט Google Cloud: נוצלו ${u.tts.credit.spentUsd.toFixed(2)}$ מתוך ${u.tts.credit.capUsd}$` : ''}` : ''}</p></div></div>
           {!u ? <Loading /> : !u.usage.length ? <Empty icon="📊" text="אין נתונים היום" /> : (
             Object.entries(byKind).map(([k, arr]) => (
               <div key={k} style={{ marginBottom: 14 }}>

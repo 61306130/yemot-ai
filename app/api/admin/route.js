@@ -15,7 +15,7 @@ import { say, speakToPath, previewVoice, cloudTtsUsage } from '../../../lib/voic
 import { runCleanup } from '../../../lib/cleanup.js';
 import { warmVoting } from '../../../lib/voting-voice.js';
 import { bg } from '../../../lib/bg.js';
-import { geminiKeyCount, diagnose } from '../../../lib/ai.js';
+import { geminiKeyCount, groqKeyCount, diagnose } from '../../../lib/ai.js';
 import { listSystems, setSystemStatus, deleteSystem, systemsMonitor, checkSystem, checkAllSystems, refreshAllSystems, renewSystemAddress } from '../../../lib/systems.js';
 
 export const dynamic = 'force-dynamic';
@@ -116,7 +116,7 @@ async function handle(request, ctx) {
       await clearErrors();
       return json({ ok: true });
     }
-    if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: Boolean(process.env.GROQ_API_KEY), tts: await cloudTtsUsage().catch(() => null) });
+    if (path === 'usage') return json({ usage: await usageToday(), geminiKeys: geminiKeyCount, groq: groqKeyCount, tts: await cloudTtsUsage().catch(() => null) });
     if (path === 'aitest') return json(await diagnose());
 
     // ----- הגדרות -----

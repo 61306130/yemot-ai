@@ -3,7 +3,7 @@
 // Gemini מבין את ההקלטה ועונה -> ימות מקריאה את התשובה -> חוזר חלילה.
 
 import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../lib/db.js';
-import { transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
+import { aiPrefs, transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 import { say, callFileName, plainTts } from '../../../lib/voice.js';
 import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
 import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
@@ -87,7 +87,7 @@ const SYSTEM_PROMPT =
 
 ההקראה בקול:
 - בלי רשימות, כוכביות, אימוג'י, קישורים, סוגריים או סימנים מיוחדים.
-- מספרים קצרים כתוב במילים.
+- מספרים, שעות, אחוזים ומעלות כתוב בספרות (למשל 22 מעלות, 15%, 10:30). הם מומרים אוטומטית למילים מנוקדות ונקראים נכון.
 
 ייתכן שההודעות הקודמות בשיחה הן משיחות טלפון קודמות עם אותו מתקשר. השתמש בהן כדי לזכור מה סיפר לך ועל מה דיברתם.
 כשאתה פונה למתקשר בשמו - רק בשם הפרטי.`;
@@ -317,6 +317,7 @@ async function handle(request) {
     }
     const convo = [...history, { role: 'user', text: transcript }];
     const st = await getSettings().catch(() => ({}));
+    aiPrefs.vertex = st['bot.vertex'] !== false;
     const NIQQUD =
       st['bot.niqqud'] !== false
         ? '\n- התשובה מוקראת על ידי מנוע הקראה שמתבלבל במילים בלי ניקוד. הוסף ניקוד מלא ומדויק למילים שאפשר לקרוא ביותר מדרך אחת, לשמות של אנשים ומקומות ולמילים לועזיות. מילים ברורות השאר בלי ניקוד.'
