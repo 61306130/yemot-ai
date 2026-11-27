@@ -66,7 +66,7 @@ async function handle(request) {
     }
     if (p.aidiag === 'regen') {
       const v = await import('../../../lib/voice.js');
-      return Response.json(await v.regenAll({ budgetMs: 45000 }));
+      return Response.json(await v.regenAll({ budgetMs: 45000, before: p.before || null }));
     }
     if (p.aidiag === 'bot') {
       const v = await import('../../../lib/voice.js');

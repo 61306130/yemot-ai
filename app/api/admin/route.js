@@ -129,7 +129,7 @@ async function handle(request, ctx) {
     // ----- תפריט ראשי (יצירת קובץ קול) -----
     // יצירה מחדש של כל ההודעות בקול הנוכחי: step=cache (בסבבים, עד left=0), אחר כך step=menus
     if (path === 'voice/regen' && method === 'POST') {
-      const { step } = await body(request);
+      const { step, before } = await body(request);
       if (step === 'menus') {
         const st = await getSettings();
         const main = st['menu.text'] ? await speakToPath(st['menu.text'], st['menu.path'] || '/M1000').catch((e) => ({ error: e.message })) : null;
@@ -138,7 +138,7 @@ async function handle(request, ctx) {
         return json({ main, systems });
       }
       const { regenAll } = await import('../../../lib/voice.js');
-      return json(await regenAll({ budgetMs: 45000 }));
+      return json(await regenAll({ budgetMs: 45000, before: before || null }));
     }
     if (path === 'menu/publish' && method === 'POST') {
       const s = await getSettings();

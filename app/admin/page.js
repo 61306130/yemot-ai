@@ -932,10 +932,11 @@ function RegenVoice({ api, notify }) {
   const run = async () => {
     if (!confirm('ליצור מחדש את כל ההודעות בכל המערכות בקול שנבחר? (קודם לשמור את ההגדרות)')) return;
     let done = 0;
+    const before = new Date().toISOString(); // גם הודעות בקול הזה שנוצרו לפני עכשיו (למשל לפני שינוי בניקוד)
     try {
       for (let i = 0; i < 40; i++) {
         setSt({ msg: `יוצר הודעות בקול החדש... ${done} נוצרו` });
-        const r = await api('voice/regen', { method: 'POST', body: { step: 'cache' } });
+        const r = await api('voice/regen', { method: 'POST', body: { step: 'cache', before } });
         done += r.done || 0;
         setSt({ msg: `יוצר הודעות בקול החדש... ${done} נוצרו, נשארו ${r.left}` });
         if (!r.left || (!r.done && r.failed)) break;
