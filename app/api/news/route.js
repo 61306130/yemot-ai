@@ -60,6 +60,16 @@ async function handle(request) {
       const nq = 'רִאשׁוֹנָה, ירוּשָׁלַיִם מְאֻחֶדֶת תַּחַת רְשׁוּת אַחַת מֵאָז שְׁנַת 1967. שֵׁנִית, שְׁמוֹ הָעַתִּיק שֶׁל הַר הַבַּיִת הוּא הַר מֹרִיָּה. שְׁלִישִׁית, בָּעִיר פּוֹעֵל קַו הָרַכֶּבֶת הַקַּלָּה מֵאָז שְׁנַת 2011.';
       const plain = stripNiqqud(nq);
       const dicta = await nakdan(plain, 5000);
+      if (p.set === 'voices') {
+        const t = 'שלום, כאן בוטי. מחר בבוקר צפוי גשם בצפון, והטמפרטורות ירדו מעט. כדאי לצאת מוקדם, ולקחת מטריה. רוצה שאבדוק גם את זמני התפילות?';
+        const names = String(p.list || 'Charon,Orus,Fenrir,Puck,Zephyr,Kore').split(',');
+        const vs = [];
+        for (const n of names) for (const r of [0, 15]) {
+          const [res] = await v.ttsAB([{ name: `${n} ${r}`, text: t, rate: r }], `he-IL-Chirp3-HD-${n}`, ai.transcribeMp3);
+          vs.push(res);
+        }
+        return Response.json({ text: t, results: vs });
+      }
       if (p.set === 'num') {
         const { speakable } = await import('../../../lib/hebnum.js');
         const a = 'מחר בירושלים 22 מעלות, ובתל אביב 27 מעלות. הרכבת יוצאת בשעה 10:30 והכרטיס עולה 35 שקלים.';
