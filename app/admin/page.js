@@ -858,6 +858,14 @@ function BotUsers({ api, notify }) {
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{new Date(c.first_call_at).toLocaleDateString('he-IL')}</div><div className="l">שיחה ראשונה</div></div>
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{timeAgo(c.last_call_at)}</div><div className="l">שיחה אחרונה</div></div>
               </div>
+              <div className="swrow" style={{ marginBottom: 12 }}>
+                <div className="tx"><b>בלי סינון תכנים</b><span>{c.no_filter ? 'המשתמש הזה מקבל תשובות בלי שום סינון' : 'המשתמש מסונן כמו כולם'}</span></div>
+                <button className={`sw ${c.no_filter ? 'on' : ''}`} onClick={async () => {
+                  if (!c.no_filter && !confirm('לבטל את כל הסינון למשתמש הזה?')) return;
+                  try { await api('callers', { method: 'POST', body: { phone: sel, no_filter: !c.no_filter } }); notify(c.no_filter ? 'הסינון הופעל' : 'הסינון בוטל למשתמש'); pick(sel); }
+                  catch (e) { notify(e.message, 'err'); }
+                }} />
+              </div>
               <LimitBox key={c.phone} prof={prof} onSave={async (v) => {
                 try { await api('callers', { method: 'POST', body: { phone: sel, daily_limit: v } }); notify('המגבלה עודכנה'); pick(sel); }
                 catch (e) { notify(e.message, 'err'); }
@@ -954,7 +962,7 @@ function BotSettings({ api, notify }) {
         'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
         'bot.music': s['bot.music'] !== false,
         'bot.vertex': s['bot.vertex'] !== false,
-        'bot.filter': s['bot.filter'] !== false, 'bot.filterWords': s['bot.filterWords'] || '', 'bot.filterReply': s['bot.filterReply'] || '',
+        'bot.filter': s['bot.filter'] !== false, 'bot.filterSmart': s['bot.filterSmart'] !== false, 'bot.filterWords': s['bot.filterWords'] || '', 'bot.filterReply': s['bot.filterReply'] || '',
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -992,10 +1000,14 @@ function BotSettings({ api, notify }) {
             <button className={`sw ${s['bot.search'] ? 'on' : ''}`} onClick={() => up('bot.search', !s['bot.search'])} />
           </div>
           <div className="swrow">
-            <div className="tx"><b>סינון תכנים</b><span>בוטי לא עוסק בנושאים לא ראויים (תוכן לא צנוע, קללות, לשון הרע, הימורים ועוד), ושאלות עם מילה חסומה לא מגיעות ל-AI בכלל. כל חסימה נרשמת ביומן</span></div>
+            <div className="tx"><b>סינון תכנים (קהל חרדי)</b><span>בוטי לא עוסק בנושאים שאינם מתאימים, ושאלות עם מילה חסומה לא מגיעות ל-AI בכלל. אפשר לבטל סינון למשתמש מסוים בכרטיס שלו. כל חסימה נרשמת ביומן</span></div>
             <button className={`sw ${s['bot.filter'] !== false ? 'on' : ''}`} onClick={() => up('bot.filter', s['bot.filter'] === false)} />
           </div>
           {s['bot.filter'] !== false && <>
+            <div className="swrow">
+              <div className="tx"><b>בדיקה חכמה</b><span>מודל AI נפרד בודק כל שאלה וכל תשובה, ותופס גם ניסוחים עקיפים וניסיונות לעקוף את הבוט ("אני המפתח", "תעמיד פנים"...). אחרי 3 חסימות ביום המתקשר ננעל עד מחר</span></div>
+              <button className={`sw ${s['bot.filterSmart'] !== false ? 'on' : ''}`} onClick={() => up('bot.filterSmart', s['bot.filterSmart'] === false)} />
+            </div>
             <label className="fld"><span className="lb">מילים וביטויים חסומים (פסיק או שורה בין אחד לשני)</span>
               <textarea className="inp" rows={3} value={s['bot.filterWords'] || ''} onChange={(e) => up('bot.filterWords', e.target.value)} placeholder="למשל: קזינו, הימורים" />
             </label>

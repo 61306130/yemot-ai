@@ -54,6 +54,12 @@ async function handle(request) {
       const systems = await refreshAllSystems({ baseUrl, speakMenu: v.speakToPath, limit: 30 });
       return Response.json({ menuText: st['menu.text'], main, systems });
     }
+    if (p.aidiag === 'mod') {
+      const tests = String(p.q || '').split('|').filter(Boolean);
+      const out = [];
+      for (const t of tests) { const t0 = Date.now(); out.push({ t, ...(await ai.moderate(t)), ms: Date.now() - t0 }); }
+      return Response.json(out);
+    }
     if (p.aidiag === 'regen') {
       const v = await import('../../../lib/voice.js');
       return Response.json(await v.regenAll({ budgetMs: 45000 }));
