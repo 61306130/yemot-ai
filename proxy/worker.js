@@ -13,6 +13,17 @@ const PER_SYSTEM = ['yemot', 'news', 'transit', 'translate'];
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // כתובת עם קידומת על הדומיינים שלנו: x8k2p4m.fixapp.site/yemot -> /api/yemot?h=x8k2p4m
+    if (!url.hostname.endsWith('.workers.dev')) {
+      const labels = url.hostname.split('.');
+      const prefix = labels.length >= 3 ? labels[0] : '';
+      if (!prefix || prefix === 'www') return fetch(request); // האתר הרגיל של הדומיין
+      if (url.pathname === '/__ping') return new Response('ok');
+      const svc = url.pathname.replace(/^\/(api\/)?/, '').replace(/\/$/, '');
+      if (!/^[a-z0-9]{6,20}$/.test(prefix) || !ALLOWED.includes(svc)) return new Response('Not found', { status: 404 });
+      if (PER_SYSTEM.includes(svc)) url.searchParams.set('h', prefix);
+      url.pathname = '/api/' + svc;
+    }
     const own = url.pathname.match(/^\/([a-f0-9]{16,64})\/([a-z]+)\/?$/);
     if (own && PER_SYSTEM.includes(own[2])) {
       url.searchParams.set('k', own[1]);

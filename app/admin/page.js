@@ -548,6 +548,44 @@ function CallerRow({ c, onSave }) {
 /* ============================ הגדרות הבוט ============================ */
 /* ============================ מערכות של משתמשים ============================ */
 /* לשונית מערכות: המערכות שחוברו + התפריט הראשי של הקו */
+function Domains({ api, notify }) {
+  const [d, reload] = useLoad(() => api('systems/domains'), [api]);
+  const [busy, setBusy] = useState('');
+  const act = async (path, bodyObj, msg, confirmText) => {
+    if (confirmText && !confirm(confirmText)) return;
+    setBusy(path + (bodyObj?.domain || ''));
+    try { const r = await api(path, { method: 'POST', body: bodyObj || {} }); notify(msg + (r.results ? ` (${r.results.filter((x) => x.ok).length}/${r.results.length})` : '')); reload(); }
+    catch (e) { notify(e.message, 'err'); }
+    setBusy('');
+  };
+  if (!d) return null;
+  return (
+    <div className="card glass" style={{ marginBottom: 16 }}>
+      <div className="ch">
+        <div><h3>כתובות המערכות (דומיינים)</h3><p>כל מערכת מקבלת קידומת אקראית על אחד הדומיינים, ולפעמים את הכתובת הרגילה של Cloudflare</p></div>
+        <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/assign', null, 'הכתובות עודכנו', 'לתת כתובת עם קידומת לכל המערכות שעוד אין להן? (התפריטים לא משתנים)')}>
+          {busy === 'systems/domains/assign' ? <span className="spin" /> : 'עדכון כתובות לכל המערכות'}</button>
+      </div>
+      <div className="rows">
+        {d.domains.map((x) => (
+          <div className="row" key={x.domain}>
+            <div className="av">{x.domain === 'kav' ? '☁️' : '🌐'}</div>
+            <div><div className="nm">{x.domain === 'kav' ? 'הכתובת הרגילה של Cloudflare' : '*.' + x.domain}
+              {' '}<span className={`tag ${x.live ? 'ok' : 'bad'}`}>{x.live ? 'פעיל' : 'לא עונה'}</span>
+              {!x.on && <span className="tag">כבוי למערכות חדשות</span>}</div>
+              <div className="mt">{x.systems} מערכות</div></div>
+            {x.domain !== 'kav' && <div className="end" style={{ display: 'flex', gap: 8 }}>
+              <button className="btn ghost sm" onClick={() => act('systems/domains/toggle', { domain: x.domain, on: !x.on }, x.on ? 'הדומיין לא יינתן למערכות חדשות' : 'הדומיין הופעל')}>{x.on ? 'כיבוי' : 'הפעלה'}</button>
+              {x.systems > 0 && <button className="btn danger sm" disabled={!!busy} onClick={() => act('systems/domains/move', { domain: x.domain }, 'המערכות הועברו', `להעביר את כל ${x.systems} המערכות מ-${x.domain} לכתובות חדשות על דומיינים אחרים? (למשל אם הדומיין נחסם)`)}>
+                {busy === 'systems/domains/move' + x.domain ? <span className="spin" /> : 'העבר לדומיין אחר'}</button>}
+            </div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CfAccounts({ api }) {
   const [d] = useLoad(() => api('systems/cf'), [api]);
   if (!d) return null;
@@ -649,7 +687,8 @@ function Systems({ api, notify }) {
               </div>
             ))}
           </div>
-          <CfAccounts api={api} />
+          <Domains api={api} notify={notify} />
+<CfAccounts api={api} />
           {all.length > 0 && (
             <div className="card glass" style={{ marginBottom: 16 }}>
               <div className="ch"><div><h3>שיחות בכל המערכות</h3><p>14 הימים האחרונים</p></div></div>

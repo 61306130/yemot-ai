@@ -82,6 +82,33 @@ async function handle(request, ctx) {
       const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
       return json(await renewSystemAddress(String(did), { baseUrl, speakMenu: speakToPath }));
     }
+    if (path === 'systems/domains' && method === 'GET') {
+      const { domainsStatus } = await import('../../../lib/systems.js');
+      return json({ domains: await domainsStatus() });
+    }
+    if (path === 'systems/domains/move' && method === 'POST') {
+      const { moveOffDomain } = await import('../../../lib/systems.js');
+      const { domain } = await body(request);
+      const st = await getSettings();
+      const off = new Set(Array.isArray(st['systems.domainsOff']) ? st['systems.domainsOff'] : []);
+      off.add(domain);
+      await setSettings({ 'systems.domainsOff': [...off] });
+      const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
+      return json({ results: await moveOffDomain(domain, { baseUrl }) });
+    }
+    if (path === 'systems/domains/toggle' && method === 'POST') {
+      const { domain, on } = await body(request);
+      const st = await getSettings();
+      const off = new Set(Array.isArray(st['systems.domainsOff']) ? st['systems.domainsOff'] : []);
+      if (on) off.delete(domain); else off.add(domain);
+      await setSettings({ 'systems.domainsOff': [...off] });
+      return json({ ok: true });
+    }
+    if (path === 'systems/domains/assign' && method === 'POST') {
+      const { assignHostsAll } = await import('../../../lib/systems.js');
+      const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
+      return json({ results: await assignHostsAll({ baseUrl }) });
+    }
     if (path === 'systems/cf' && method === 'GET') {
       const { cfAccounts, cfEnabled } = await import('../../../lib/cfworkers.js');
       const accs = cfEnabled ? await cfAccounts(true).catch((e) => ({ error: e.message })) : [];

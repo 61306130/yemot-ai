@@ -44,6 +44,11 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'hosts') {
+      const sy = await import('../../../lib/systems.js');
+      if (p.do === 'assign') return Response.json(await sy.assignHostsAll({ baseUrl: process.env.PUBLIC_BASE_URL || 'https://yemot-ai-dusky.vercel.app' }));
+      return Response.json(await sy.domainsStatus());
+    }
     if (p.aidiag === 'regenmenus') {
       const v = await import('../../../lib/voice.js');
       const { getSettings } = await import('../../../lib/store.js');
