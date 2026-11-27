@@ -60,6 +60,10 @@ async function handle(request) {
       const nq = 'רִאשׁוֹנָה, ירוּשָׁלַיִם מְאֻחֶדֶת תַּחַת רְשׁוּת אַחַת מֵאָז שְׁנַת 1967. שֵׁנִית, שְׁמוֹ הָעַתִּיק שֶׁל הַר הַבַּיִת הוּא הַר מֹרִיָּה. שְׁלִישִׁית, בָּעִיר פּוֹעֵל קַו הָרַכֶּבֶת הַקַּלָּה מֵאָז שְׁנַת 2011.';
       const plain = stripNiqqud(nq);
       const dicta = await nakdan(plain, 5000);
+      if (p.set === 'custom') {
+        const list = String(p.q || '').split('|').filter(Boolean).map((t, i) => ({ name: String(i + 1), text: t, rate: Number(p.rate) || 0 }));
+        return Response.json(await v.ttsAB(list, p.voice || 'he-IL-Chirp3-HD-Charon', ai.transcribeMp3));
+      }
       if (p.set === 'voices') {
         const t = 'שלום, כאן בוטי. מחר בבוקר צפוי גשם בצפון, והטמפרטורות ירדו מעט. כדאי לצאת מוקדם, ולקחת מטריה. רוצה שאבדוק גם את זמני התפילות?';
         const names = String(p.list || 'Charon,Orus,Fenrir,Puck,Zephyr,Kore').split(',');
