@@ -44,6 +44,16 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'regenmenus') {
+      const v = await import('../../../lib/voice.js');
+      const { getSettings } = await import('../../../lib/store.js');
+      const { refreshAllSystems } = await import('../../../lib/systems.js');
+      const st = await getSettings();
+      const main = st['menu.text'] ? await v.speakToPath(st['menu.text'], st['menu.path'] || '/M1000').catch((e) => ({ error: e.message })) : null;
+      const baseUrl = process.env.PUBLIC_BASE_URL || 'https://yemot-ai-dusky.vercel.app';
+      const systems = await refreshAllSystems({ baseUrl, speakMenu: v.speakToPath, limit: 30 });
+      return Response.json({ menuText: st['menu.text'], main, systems });
+    }
     if (p.aidiag === 'regen') {
       const v = await import('../../../lib/voice.js');
       return Response.json(await v.regenAll({ budgetMs: 45000 }));
