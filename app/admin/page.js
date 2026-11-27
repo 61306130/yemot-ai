@@ -966,7 +966,7 @@ function BotSettings({ api, notify }) {
       await api('settings', { method: 'POST', body: {
         'bot.greeting': s['bot.greeting'], 'bot.prompt': s['bot.prompt'], 'bot.search': s['bot.search'],
         'voice.name': s['voice.name'], 'voice.enabled': s['voice.enabled'],
-        'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'] !== false, 'voice.nakdan': s['voice.nakdan'] === true,
+        'voice.rate': Number(s['voice.rate']) || 0, 'voice.answerRate': Number(s['voice.answerRate']) || 0, 'bot.niqqud': s['bot.niqqud'] !== false, 'voice.nakdan': s['voice.nakdan'] === true,
         'bot.dailyLimit': Math.max(0, Number(s['bot.dailyLimit']) || 0),
         'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
         'bot.music': s['bot.music'] !== false,
@@ -1056,7 +1056,11 @@ function BotSettings({ api, notify }) {
             <div className="tx"><b>מנגינה בזמן ההמתנה</b><span>מוזיקה קצרה בין השאלה לתשובה של בוטי</span></div>
             <button className={`sw ${s['bot.music'] !== false ? 'on' : ''}`} onClick={() => up('bot.music', s['bot.music'] === false)} />
           </div>
-          <label className="fld"><span className="lb">מהירות דיבור: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
+          <label className="fld"><span className="lb">מהירות התשובות של בוטי: {Number(s['voice.answerRate']) > 0 ? '+' : ''}{Number(s['voice.answerRate']) || 0}%</span>
+            <input type="range" min="-20" max="30" step="5" value={Number(s['voice.answerRate']) || 0}
+              onChange={(e) => up('voice.answerRate', Number(e.target.value))} style={{ width: '100%', accentColor: '#7c5cff' }} />
+          </label>
+          <label className="fld"><span className="lb">מהירות ההודעות הקבועות: {Number(s['voice.rate']) > 0 ? '+' : ''}{Number(s['voice.rate']) || 0}%</span>
             <input type="range" min="-20" max="50" step="5" value={Number(s['voice.rate']) || 0}
               onChange={(e) => up('voice.rate', Number(e.target.value))} style={{ width: '100%', accentColor: '#7c5cff' }} />
           </label>
