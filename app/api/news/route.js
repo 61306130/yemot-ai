@@ -40,6 +40,22 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'bot') {
+      const v = await import('../../../lib/voice.js');
+      const { getSettings } = await import('../../../lib/store.js');
+      const { creditStatus } = await import('../../../lib/credit.js');
+      const cfg = await getSettings();
+      const before = await creditStatus();
+      const ai1 = await ai.vertexProbe();
+      const text = ai1.text || 'זו בדיקה של הקול. כוכב מאיר באור של עצמו, וכוכב לכת מחזיר את האור של השמש. כדור הארץ הוא כוכב לכת.';
+      const t = Date.now();
+      const file = await v.say(text, { name: 'diag-bot-voice' });
+      const ttsMs = Date.now() - t;
+      const t2 = Date.now();
+      const syn = await v.previewVoice(text, cfg['voice.name'], Number(cfg['voice.rate']) || 0).catch((e) => ({ error: String(e) }));
+      return Response.json({ voice: cfg['voice.name'], rate: cfg['voice.rate'], ai: ai1, sayMs: ttsMs, file,
+        synthOnlyMs: Date.now() - t2, engine: syn.engine, synthError: syn.error, creditBefore: before, creditAfter: await creditStatus() });
+    }
     if (p.aidiag === 'tts') {
       const v = await import('../../../lib/voice.js');
       return Response.json({ tts: await v.testCloudTts(), vertex: (await ai.diagnose()).vertex });
