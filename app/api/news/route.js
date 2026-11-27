@@ -62,7 +62,7 @@ async function handle(request) {
       const dicta = await nakdan(plain, 5000);
       if (p.set === 'custom') {
         const list = String(p.q || '').split('|').filter(Boolean).map((t, i) => ({ name: String(i + 1), text: t, rate: Number(p.rate) || 0 }));
-        return Response.json(await v.ttsAB(list, p.voice || 'he-IL-Chirp3-HD-Charon', ai.transcribeMp3));
+        return Response.json(await v.ttsAB(list, p.voice || 'he-IL-Chirp3-HD-Charon', p.nq ? ai.transcribeNiqqud : ai.transcribeMp3));
       }
       if (p.set === 'voices') {
         const t = 'שלום, כאן בוטי. מחר בבוקר צפוי גשם בצפון, והטמפרטורות ירדו מעט. כדאי לצאת מוקדם, ולקחת מטריה. רוצה שאבדוק גם את זמני התפילות?';
