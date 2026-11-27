@@ -49,13 +49,12 @@ async function handle(request) {
       if (p.do === 'test') {
         const { sql } = await import('../../../lib/db.js');
         const rows = await sql`select did, worker_url from systems where status = 'active'`;
-        const urls = [...rows.filter((r) => r.worker_url).map((r) => r.worker_url + '/news'), 'https://weinreich.site', 'https://www.weinreich.site', 'https://mivzak360.site', 'https://www.mivzak360.site', 'https://fixapp.site'];
-        const out = [];
-        for (const u of urls) {
+        const urls = [...rows.filter((r) => r.worker_url).map((r) => r.worker_url + '/__ping'), 'https://weinreich.site', 'https://www.weinreich.site', 'https://mivzak360.site', 'https://www.mivzak360.site', 'https://fixapp.site'];
+        const out = await Promise.all(urls.map(async (u) => {
           const t = Date.now();
-          try { const r = await fetch(u, { signal: AbortSignal.timeout(15000), redirect: 'manual' }); const txt = await r.text(); out.push({ u, status: r.status, ms: Date.now() - t, loc: r.headers.get('location'), body: txt.slice(0, 120) }); }
-          catch (e) { out.push({ u, error: String(e?.message || e).slice(0, 150) }); }
-        }
+          try { const r = await fetch(u, { signal: AbortSignal.timeout(9000), redirect: 'manual' }); const txt = await r.text(); return { u, status: r.status, ms: Date.now() - t, loc: r.headers.get('location'), body: txt.replace(/\s+/g, ' ').slice(0, 100) }; }
+          catch (e) { return { u, error: String(e?.message || e).slice(0, 150) }; }
+        }));
         return Response.json(out);
       }
       if (p.do === 'setup') { const cw = await import('../../../lib/cfworkers.js'); return Response.json(await cw.setupDomains(sy.DEFAULT_DOMAINS).catch((e) => ({ error: e.message }))); }
