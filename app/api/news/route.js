@@ -60,6 +60,14 @@ async function handle(request) {
       const nq = 'רִאשׁוֹנָה, ירוּשָׁלַיִם מְאֻחֶדֶת תַּחַת רְשׁוּת אַחַת מֵאָז שְׁנַת 1967. שֵׁנִית, שְׁמוֹ הָעַתִּיק שֶׁל הַר הַבַּיִת הוּא הַר מֹרִיָּה. שְׁלִישִׁית, בָּעִיר פּוֹעֵל קַו הָרַכֶּבֶת הַקַּלָּה מֵאָז שְׁנַת 2011.';
       const plain = stripNiqqud(nq);
       const dicta = await nakdan(plain, 5000);
+      if (p.set === 'num') {
+        const { speakable } = await import('../../../lib/hebnum.js');
+        const a = 'מחר בירושלים 22 מעלות, ובתל אביב 27 מעלות. הרכבת יוצאת בשעה 10:30 והכרטיס עולה 35 שקלים.';
+        return Response.json(await v.ttsAB([
+          { name: 'ספרות', text: a, rate: 15 },
+          { name: 'מילים בלי ניקוד', text: stripNiqqud(speakable(a)), rate: 15 },
+        ], p.voice || 'he-IL-Chirp3-HD-Charon', ai.transcribeMp3));
+      }
       const variants = [
         { name: 'בלי ניקוד, מהירות 15', text: plain, rate: 15 },
         { name: 'בלי ניקוד, מהירות רגילה', text: plain, rate: 0 },
