@@ -44,6 +44,10 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'mainlinks') {
+      const sy = await import('../../../lib/systems.js');
+      return Response.json(await sy.readLinks(p.tok === 'vote' ? process.env.VOTE_YEMOT_TOKEN : process.env.YEMOT_TOKEN));
+    }
     if (p.aidiag === 'hosts') {
       const sy = await import('../../../lib/systems.js');
       if (p.do === 'test') {
