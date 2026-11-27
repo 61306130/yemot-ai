@@ -54,6 +54,21 @@ async function handle(request) {
       const systems = await refreshAllSystems({ baseUrl, speakMenu: v.speakToPath, limit: 30 });
       return Response.json({ menuText: st['menu.text'], main, systems });
     }
+    if (p.aidiag === 'ab') {
+      const v = await import('../../../lib/voice.js');
+      const { stripNiqqud, nakdan } = await import('../../../lib/nakdan.js');
+      const nq = 'רִאשׁוֹנָה, ירוּשָׁלַיִם מְאֻחֶדֶת תַּחַת רְשׁוּת אַחַת מֵאָז שְׁנַת 1967. שֵׁנִית, שְׁמוֹ הָעַתִּיק שֶׁל הַר הַבַּיִת הוּא הַר מֹרִיָּה. שְׁלִישִׁית, בָּעִיר פּוֹעֵל קַו הָרַכֶּבֶת הַקַּלָּה מֵאָז שְׁנַת 2011.';
+      const plain = stripNiqqud(nq);
+      const dicta = await nakdan(plain, 5000);
+      const variants = [
+        { name: 'בלי ניקוד, מהירות 15', text: plain, rate: 15 },
+        { name: 'בלי ניקוד, מהירות רגילה', text: plain, rate: 0 },
+        { name: 'ניקוד AI, מהירות 15', text: nq, rate: 15 },
+        { name: 'ניקוד AI, מהירות רגילה', text: nq, rate: 0 },
+        { name: 'ניקוד דיקטה, מהירות 15', text: dicta, rate: 15 },
+      ];
+      return Response.json(await v.ttsAB(variants, p.voice || 'he-IL-Chirp3-HD-Charon', ai.transcribeMp3));
+    }
     if (p.aidiag === 'last') {
       const { sql } = await import('../../../lib/db.js');
       const msgs = await sql`select role, text, created_at from messages order by id desc limit ${Number(p.n) || 16}`;
