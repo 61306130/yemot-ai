@@ -46,6 +46,7 @@ async function handle(request) {
     const ai = await import('../../../lib/ai.js');
     if (p.aidiag === 'hosts') {
       const sy = await import('../../../lib/systems.js');
+      if (p.do === 'setup') { const cw = await import('../../../lib/cfworkers.js'); return Response.json(await cw.setupDomains(sy.DEFAULT_DOMAINS).catch((e) => ({ error: e.message }))); }
       if (p.do === 'assign') return Response.json(await sy.assignHostsAll({ baseUrl: process.env.PUBLIC_BASE_URL || 'https://yemot-ai-dusky.vercel.app' }));
       return Response.json(await sy.domainsStatus());
     }

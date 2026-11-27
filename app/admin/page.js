@@ -563,8 +563,12 @@ function Domains({ api, notify }) {
     <div className="card glass" style={{ marginBottom: 16 }}>
       <div className="ch">
         <div><h3>כתובות המערכות (דומיינים)</h3><p>כל מערכת מקבלת קידומת אקראית על אחד הדומיינים, ולפעמים את הכתובת הרגילה של Cloudflare</p></div>
+        <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/setup', null, 'הדומיינים הוגדרו ב-Cloudflare')}>
+          {busy === 'systems/domains/setup' ? <span className="spin" /> : 'הגדרת הדומיינים ב-Cloudflare'}</button>
         <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/assign', null, 'הכתובות עודכנו', 'לתת כתובת עם קידומת לכל המערכות שעוד אין להן? (התפריטים לא משתנים)')}>
           {busy === 'systems/domains/assign' ? <span className="spin" /> : 'עדכון כתובות לכל המערכות'}</button>
+        </div>
       </div>
       <div className="rows">
         {d.domains.map((x) => (

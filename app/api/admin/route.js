@@ -104,6 +104,12 @@ async function handle(request, ctx) {
       await setSettings({ 'systems.domainsOff': [...off] });
       return json({ ok: true });
     }
+    if (path === 'systems/domains/setup' && method === 'POST') {
+      const { setupDomains } = await import('../../../lib/cfworkers.js');
+      const { DEFAULT_DOMAINS } = await import('../../../lib/systems.js');
+      const st = await getSettings();
+      return json({ report: await setupDomains(Array.isArray(st['systems.domains']) ? st['systems.domains'] : DEFAULT_DOMAINS) });
+    }
     if (path === 'systems/domains/assign' && method === 'POST') {
       const { assignHostsAll } = await import('../../../lib/systems.js');
       const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
