@@ -566,6 +566,8 @@ function Domains({ api, notify }) {
         <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/setup', null, 'הדומיינים הוגדרו ב-Cloudflare')}>
           {busy === 'systems/domains/setup' ? <span className="spin" /> : 'הגדרת הדומיינים ב-Cloudflare'}</button>
+        <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/hidemain', null, 'הקישורים במערכת הראשית ובהצבעה הוחלפו', 'להחליף את הקישורים בשלוחות של המערכת הראשית ומערכת ההצבעה לקישורים חבויים חדשים?')}>
+          {busy === 'systems/domains/hidemain' ? <span className="spin" /> : 'קישורים חדשים למערכת הראשית'}</button>
         <button className="btn ghost sm" disabled={!!busy} onClick={() => act('systems/domains/assign', null, 'הכתובות עודכנו', 'לתת כתובת עם קידומת לכל המערכות שעוד אין להן? (התפריטים לא משתנים)')}>
           {busy === 'systems/domains/assign' ? <span className="spin" /> : 'עדכון כתובות לכל המערכות'}</button>
         </div>

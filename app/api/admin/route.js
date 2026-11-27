@@ -110,6 +110,10 @@ async function handle(request, ctx) {
       const st = await getSettings();
       return json({ report: await setupDomains(Array.isArray(st['systems.domains']) ? st['systems.domains'] : DEFAULT_DOMAINS) });
     }
+    if (path === 'systems/domains/hidemain' && method === 'POST') {
+      const { hideMainLinks } = await import('../../../lib/systems.js');
+      return json({ results: await hideMainLinks() });
+    }
     if (path === 'systems/domains/assign' && method === 'POST') {
       const { assignHostsAll } = await import('../../../lib/systems.js');
       const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;

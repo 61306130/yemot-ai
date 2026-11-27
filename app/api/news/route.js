@@ -50,6 +50,7 @@ async function handle(request) {
     }
     if (p.aidiag === 'hosts') {
       const sy = await import('../../../lib/systems.js');
+      if (p.do === 'hidemain') return Response.json(await sy.hideMainLinks().catch((e) => ({ error: e.message })));
       if (p.do === 'test') {
         const { sql } = await import('../../../lib/db.js');
         const rows = await sql`select did, worker_url from systems where status = 'active'`;
