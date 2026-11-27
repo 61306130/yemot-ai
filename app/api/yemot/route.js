@@ -438,13 +438,18 @@ async function handle(request) {
 
   const cfgM = await getSettings().catch(() => ({}));
   if (cfgM['bot.music'] === false) return runQuestion();
-  return musicGate(`q:${callId}:${n}`, runQuestion);
+  return musicGate(`q:${callId}:${n}`, runQuestion, p, n);
 }
 
 // מנגינה בזמן ההמתנה: הבקשה הראשונה מתחילה לעבד ברקע ומחזירה מנגינה קצרה.
 // אחרי המנגינה ימות פונה שוב לשרת (עם אותם פרמטרים) - ואז מחזירים את התשובה אם היא מוכנה,
 // מחכים לה עוד כמה שניות, או משמיעים מנגינה נוספת.
-async function musicGate(jobKey, runQuestion) {
+async function musicGate(jobKey, runQuestion, p = {}, n = 0) {
+  // ימות לא חוזרת לשרת אחרי הודעה רגילה (id_list_message) - היא ממשיכה לתפריט.
+  // לכן המנגינה נשלחת כ"הקשה" עם המתנה של שנייה: בסוף המנגינה ימות פונה שוב לשרת עם התשובה (None).
+  // לכל פנייה שם משתנה חדש, אחרת ימות מדלגת על השאלה כי כבר יש לה תשובה
+  const waits = Object.keys(p).filter((k) => new RegExp(`^mw${n}x\\d+$`).test(k)).length;
+  const musicReply = (file) => reply(tapRead([file], `mw${n}x${waits + 1}`, 1));
   const job = await loadState(jobKey).catch(() => null);
   if (!job) {
     await saveState(jobKey, { status: 'working', at: Date.now() });
@@ -460,7 +465,7 @@ async function musicGate(jobKey, runQuestion) {
     waitUntil(work);
     const music = await holdMusic().catch(() => null);
     if (!music) { await work; const j = await loadState(jobKey); return reply(j?.reply || ''); } // בלי מנגינה - כמו פעם
-    return reply(`id_list_message=${music}`);
+    return musicReply(music);
   }
   if (job.status === 'done') return reply(job.reply);
   // עדיין עובד: מחכים עד ~8 שניות לתשובה
@@ -478,7 +483,7 @@ async function musicGate(jobKey, runQuestion) {
     return reply(text);
   }
   const music = await holdMusic().catch(() => null);
-  return reply(music ? `id_list_message=${music}` : 'id_list_message=t-רק עוד רגע');
+  return musicReply(music || 't-רק עוד רגע');
 }
 
 export const GET = handle;
