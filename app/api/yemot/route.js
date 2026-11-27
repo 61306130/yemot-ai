@@ -238,7 +238,7 @@ async function handle(request) {
   // כניסה לשלוחה: זיהוי המתקשר, הודעת פתיחה ובקשת הקלטה ראשונה
   if (n === 0) {
     const cfg = await getSettings().catch(() => ({}));
-    let greeting = cfg['bot.greeting'] || 'שלום, כאן בוטי. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית';
+    let greeting = cfg['bot.greeting'] || 'שלום, כאן בוטי העוזר החכם! שאלו אותי כל שאלה אחרי הצליל, ובסיום לחצו סולמית.';
     if (hasDb) {
       try {
         const { caller, previousMessages } = await startCall(callId, phone);
@@ -261,7 +261,7 @@ async function handle(request) {
           greeting = `שלום ${first}! כאן בוטי. שאל אותי כל שאלה אחרי הצליל, ובסיום הקש סולמית`;
         } else if (previousMessages > 0) {
           const name = first ? ` ${first}` : '';
-          greeting = `שלום${name}, טוב לשמוע ממך שוב. אני זוכר על מה דיברנו. אפשר להמשיך מאיפה שעצרנו או לשאול משהו חדש. דבר אחרי הצליל ובסיום הקש סולמית`;
+          greeting = `שלום${name}! במה אפשר לעזור היום? שאלו אחרי הצליל, ובסיום לחצו סולמית.`;
         }
       } catch (e) {
         console.error('startCall:', e);
@@ -345,7 +345,7 @@ async function handle(request) {
       const msgs = await Promise.all([
         say(replyFor(cat, FLT), { cache: true }),
         n2 === STRIKES_PER_DAY - 1 && !phone.startsWith('hidden') ? say(WARN_REPLY, { cache: true }) : null,
-        say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
+        say('אפשר לשאול עוד שאלה אחרי הצליל, ובסיום לחצו סולמית', { cache: true }),
       ]);
       const next = msgs.pop();
       return reply(`id_list_message=${msgs.filter(Boolean).join('.')}&` + recordRead(next, n + 1));
@@ -425,7 +425,7 @@ async function handle(request) {
     let late = false;
     const [answerMsg, nextMsg] = await Promise.all([
       Promise.race([say(answer, { name: callFileName(callId, n), rate: st['voice.answerRate'] ?? 8 }), new Promise((r) => setTimeout(() => { late = true; r(plainTts(answer)); }, left))]),
-      say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
+      say('אפשר לשאול עוד שאלה אחרי הצליל, ובסיום לחצו סולמית', { cache: true }),
     ]);
     // מעקב: תשובה שלא הוקראה בקול הנבחר - כמה זמן לקח כל שלב
     if (late || String(answerMsg).startsWith('t-')) {
