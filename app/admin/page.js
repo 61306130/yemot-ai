@@ -966,7 +966,7 @@ function BotSettings({ api, notify }) {
       await api('settings', { method: 'POST', body: {
         'bot.greeting': s['bot.greeting'], 'bot.prompt': s['bot.prompt'], 'bot.search': s['bot.search'],
         'voice.name': s['voice.name'], 'voice.enabled': s['voice.enabled'],
-        'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'], 'voice.nakdan': s['voice.nakdan'] !== false,
+        'voice.rate': Number(s['voice.rate']) || 0, 'bot.niqqud': s['bot.niqqud'] !== false, 'voice.nakdan': s['voice.nakdan'] === true,
         'bot.dailyLimit': Math.max(0, Number(s['bot.dailyLimit']) || 0),
         'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
         'bot.music': s['bot.music'] !== false,
@@ -1029,8 +1029,12 @@ function BotSettings({ api, notify }) {
             <button className={`sw ${s['bot.vertex'] !== false ? 'on' : ''}`} onClick={() => up('bot.vertex', s['bot.vertex'] === false)} />
           </div>
           <div className="swrow">
-            <div className="tx"><b>ניקוד אוטומטי (נקדן דיקטה)</b><span>כל טקסט מנוקד בנקדן של דיקטה לפני ההקראה בקול Chirp, כדי שיקרא נכון. כבוי = ה-AI מנקד בעצמו</span></div>
-            <button className={`sw ${s['voice.nakdan'] !== false ? 'on' : ''}`} onClick={() => up('voice.nakdan', s['voice.nakdan'] === false)} />
+            <div className="tx"><b>ניקוד מלא בתשובות</b><span>ה-AI כותב את כל התשובה בניקוד מלא, כדי שהקול יקרא נכון</span></div>
+            <button className={`sw ${s['bot.niqqud'] !== false ? 'on' : ''}`} onClick={() => up('bot.niqqud', s['bot.niqqud'] === false)} />
+          </div>
+          <div className="swrow">
+            <div className="tx"><b>נקדן דיקטה (ניסיוני)</b><span>מנקד כל טקסט בנקדן של דיקטה במקום ה-AI. כבוי כברירת מחדל</span></div>
+            <button className={`sw ${s['voice.nakdan'] === true ? 'on' : ''}`} onClick={() => up('voice.nakdan', s['voice.nakdan'] !== true)} />
           </div>
           <div className="swrow">
             <div className="tx"><b>קול טבעי</b><span>הקראה בקול אנושי במקום הקול של ימות</span></div>
