@@ -1025,7 +1025,7 @@ function BotSettings({ api, notify }) {
             </label>
           </>}
           <div className="swrow">
-            <div className="tx"><b>Gemini המתקדם (Vertex)</b><span>גיבוי כשהחינמיים לא עונים, וראשון בשאלות עם חיפוש בגוגל. בערך עשירית סנט לתשובה מקרדיט הניסיון. כבוי = Gemini החינמי ו-Groq בלבד</span></div>
+            <div className="tx"><b>Gemini המתקדם (Vertex)</b><span>עונה כש-Gemini החינמי במכסה (לפני Groq, שחלש בעברית), וראשון בשאלות עם חיפוש. בערך עשירית סנט לתשובה מקרדיט הניסיון. כבוי = Gemini החינמי ו-Groq בלבד</span></div>
             <button className={`sw ${s['bot.vertex'] !== false ? 'on' : ''}`} onClick={() => up('bot.vertex', s['bot.vertex'] === false)} />
           </div>
           <div className="swrow">
