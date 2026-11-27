@@ -271,10 +271,14 @@ async function handle(request) {
   try {
     const cfgL = await getSettings().catch(() => ({}));
     const baseLimit = Number(cfgL['bot.dailyLimit']) || 0;
-    if (baseLimit > 0 && hasDb && !phone.startsWith('hidden') && !(await loadState(`q:${callId}:${n}`).catch(() => null))) {
-      const owner = await isSystemOwner(phone);
+    // מגבלה אישית מכרטיס המשתמש באתר (ריק = ברירת מחדל, 0 = בלי הגבלה)
+    const personal = hasDb && !phone.startsWith('hidden')
+      ? (await sql`select daily_limit from callers where phone = ${phone}`.catch(() => []))[0]?.daily_limit ?? null
+      : null;
+    if ((baseLimit > 0 || personal > 0) && personal !== 0 && hasDb && !phone.startsWith('hidden') && !(await loadState(`q:${callId}:${n}`).catch(() => null))) {
+      const owner = personal != null ? true : await isSystemOwner(phone);
       const ownerLimit = Number(cfgL['bot.dailyLimitOwner']) || 40;
-      const limit = owner ? Math.max(baseLimit, ownerLimit) : baseLimit;
+      const limit = personal != null ? personal : owner ? Math.max(baseLimit, ownerLimit) : baseLimit;
       const [{ n: today }] = await sql`select count(*)::int as n from messages
         where phone = ${phone} and role = 'user' and created_at > date_trunc('day', now() at time zone 'Asia/Jerusalem') at time zone 'Asia/Jerusalem'`.catch(() => [{ n: 0 }]);
       if (today >= limit) {

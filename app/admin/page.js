@@ -780,6 +780,38 @@ function MiniBars({ data, labels, every = 1 }) {
   );
 }
 
+function LimitBox({ prof, onSave }) {
+  const l = prof.limit || {};
+  const [mode, setMode] = useState(l.custom == null ? 'default' : l.custom === 0 ? 'none' : 'custom');
+  const [val, setVal] = useState(l.custom > 0 ? l.custom : (l.defaultLimit || 20));
+  const eff = l.effective || 0;
+  const pct = eff > 0 ? Math.min(100, (l.today / eff) * 100) : 0;
+  const save = () => onSave(mode === 'default' ? null : mode === 'none' ? 0 : Math.max(1, Number(val) || 1));
+  return (
+    <div className="card glass" style={{ padding: 14, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div>
+          <h4 style={{ margin: 0 }}>שאלות לבוט ביום</h4>
+          <div className="mt">היום: {l.today ?? 0} {eff > 0 ? `מתוך ${eff}` : '· בלי הגבלה'}
+            {' · '}{l.custom == null ? `ברירת מחדל${l.owner ? ' (בעל מערכת)' : ''}` : 'מגבלה אישית'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select className="inp" style={{ width: 'auto' }} value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="default">ברירת מחדל ({l.defaultLimit || 'בלי הגבלה'})</option>
+            <option value="custom">מספר אישי</option>
+            <option value="none">בלי הגבלה</option>
+          </select>
+          {mode === 'custom' && <input className="inp" type="number" min="1" max="1000" style={{ width: 90 }} value={val} onChange={(e) => setVal(e.target.value)} />}
+          <button className="btn sm" onClick={save}>שמור</button>
+        </div>
+      </div>
+      {eff > 0 && <div style={{ height: 6, borderRadius: 4, background: 'rgba(255,255,255,.08)', marginTop: 10, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? '#ff5c7a' : 'linear-gradient(90deg,#7c5cff,#3fd0ff)' }} />
+      </div>}
+    </div>
+  );
+}
+
 function BotUsers({ api, notify }) {
   const [q, setQ] = useState('');
   const [list, setList] = useState(null);
@@ -826,6 +858,10 @@ function BotUsers({ api, notify }) {
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{new Date(c.first_call_at).toLocaleDateString('he-IL')}</div><div className="l">שיחה ראשונה</div></div>
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{timeAgo(c.last_call_at)}</div><div className="l">שיחה אחרונה</div></div>
               </div>
+              <LimitBox key={c.phone} prof={prof} onSave={async (v) => {
+                try { await api('callers', { method: 'POST', body: { phone: sel, daily_limit: v } }); notify('המגבלה עודכנה'); pick(sel); }
+                catch (e) { notify(e.message, 'err'); }
+              }} />
               <h4 style={{ margin: '6px 0 4px' }}>באילו שעות הוא מתקשר {peak >= 0 && prof.byHour[peak] > 0 && <span className="mt">· הכי הרבה בשעה {peak}:00</span>}</h4>
               <MiniBars data={prof.byHour} labels={prof.byHour.map((_, i) => String(i))} every={3} />
               <h4 style={{ margin: '18px 0 4px' }}>באילו ימים</h4>
