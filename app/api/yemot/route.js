@@ -308,7 +308,9 @@ async function handle(request) {
       }
     }
 
+    const T_stt = Date.now();
     const { text: transcript, provider: sttBy } = await transcribe(audio);
+    const T_ai = Date.now();
     const deadline = Date.now() + 14000; // זמן כולל לתשובה (AI), כדי שימות לא תנתק עם "שגיאה בשרת API"
     if (!transcript) {
       return reply(recordRead(await say('לא שמעתי אותך. נסה לדבר שוב אחרי הצליל, ובסיום הקש סולמית', { cache: true }), n + 1));
@@ -362,11 +364,17 @@ async function handle(request) {
 
     // התשובה בקול טבעי (קובץ קבוע לכל שיחה), והשאלה הבאה מהמטמון
     // אם הקול הטבעי לא מוכן בזמן (שירות הקול איטי / כבר עבר הרבה זמן) - ימות מקריאה בעצמה, בלי ניתוק
-    const left = Math.max(1500, 20000 - (Date.now() - T0));
+    const T_tts = Date.now();
+    const left = Math.max(1500, 20000 - (T_tts - T0));
+    let late = false;
     const [answerMsg, nextMsg] = await Promise.all([
-      Promise.race([say(answer, { name: callFileName(callId, n) }), new Promise((r) => setTimeout(() => r(plainTts(answer)), left))]),
+      Promise.race([say(answer, { name: callFileName(callId, n) }), new Promise((r) => setTimeout(() => { late = true; r(plainTts(answer)); }, left))]),
       say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
     ]);
+    // מעקב: תשובה שלא הוקראה בקול הנבחר - כמה זמן לקח כל שלב
+    if (late || String(answerMsg).startsWith('t-')) {
+      logError('voice-late', `${late ? 'הקול לא היה מוכן בזמן' : 'הקול נכשל'} · הורדה ${T_stt - T0}ms · תמלול ${T_ai - T_stt}ms · AI (${aiBy}) ${T_tts - T_ai}ms · קול ${Date.now() - T_tts}ms · ${answer.length} תווים`);
+    }
     return reply(`id_list_message=${answerMsg}&` + recordRead(nextMsg, n + 1));
   } catch (err) {
     if (err?.busy) {
