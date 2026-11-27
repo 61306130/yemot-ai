@@ -320,7 +320,7 @@ async function handle(request) {
     const st = await getSettings().catch(() => ({}));
     aiPrefs.vertex = st['bot.vertex'] !== false;
     const NIQQUD =
-      st['bot.niqqud'] !== false
+      st['voice.nakdan'] === false && st['bot.niqqud'] !== false // עם הנקדן - ה-AI לא מנקד (הניקוד שלו שגוי)
         ? '\n- התשובה מוקראת על ידי מנוע הקראה שמתבלבל במילים בלי ניקוד. הוסף ניקוד מלא ומדויק למילים שאפשר לקרוא ביותר מדרך אחת, לשמות של אנשים ומקומות ולמילים לועזיות. מילים ברורות השאר בלי ניקוד.'
         : '';
     // ---- סינון תכנים (קהל חרדי). מתקשר שסומן באתר "בלי סינון" - בלי שום סינון ----

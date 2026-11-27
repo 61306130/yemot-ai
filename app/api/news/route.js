@@ -54,6 +54,10 @@ async function handle(request) {
       const systems = await refreshAllSystems({ baseUrl, speakMenu: v.speakToPath, limit: 30 });
       return Response.json({ menuText: st['menu.text'], main, systems });
     }
+    if (p.aidiag === 'nakdan') {
+      const { nakdanTest } = await import('../../../lib/nakdan.js');
+      return Response.json(await nakdanTest(p.q || undefined));
+    }
     if (p.aidiag === 'mod') {
       const tests = String(p.q || '').split('|').filter(Boolean);
       const out = [];
