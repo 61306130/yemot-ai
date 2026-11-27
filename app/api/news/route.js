@@ -60,7 +60,7 @@ async function handle(request) {
       const v = await import('../../../lib/voice.js');
       return Response.json({ tts: await v.testCloudTts(), vertex: (await ai.diagnose()).vertex });
     }
-    return Response.json(p.aidiag === 'groq' ? await ai.groqLimits() : await ai.diagnose());
+    return Response.json(p.aidiag === 'groq' ? { keys: await ai.groqKeysCheck(), ...(await ai.groqLimits()) } : await ai.diagnose());
   }
   // מערכת של משתמש (k) - הקבצים וההקלטות עוברים דרך הטוקן שלה
   const sys = await resolveSystem(p, request).catch(() => ({}));
