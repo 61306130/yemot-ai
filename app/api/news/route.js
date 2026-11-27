@@ -4,6 +4,7 @@ import { getBulletin, anyBulletin, refreshBulletin, bulletinText as makeText } f
 import { bg } from '../../../lib/bg.js';
 import { say } from '../../../lib/voice.js';
 import { logError } from '../../../lib/store.js';
+import { trackListen } from '../../../lib/newsstats.js';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -32,7 +33,10 @@ async function handle(request) {
       for (const [k, v] of await request.formData()) p[k] = v;
     } catch {}
   }
-  if (p.hangup === 'yes') return reply('');
+  if (p.hangup === 'yes') {
+    if (p.ApiCallId) bg(() => trackListen(p, null, 'end'));
+    return reply('');
+  }
   // אבחון זמני של נעילות במסד - רק דרך כתובת הביניים (עם המפתח הסודי שלה)
   if (p.dbdiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const { dbDiag } = await import('../../../lib/dbdiag.js');
@@ -40,6 +44,10 @@ async function handle(request) {
   }
   if (p.aidiag && process.env.PROXY_SECRET && request.headers.get('x-proxy-key') === process.env.PROXY_SECRET) {
     const ai = await import('../../../lib/ai.js');
+    if (p.aidiag === 'regen') {
+      const v = await import('../../../lib/voice.js');
+      return Response.json(await v.regenAll({ budgetMs: 45000 }));
+    }
     if (p.aidiag === 'bot') {
       const v = await import('../../../lib/voice.js');
       const { getSettings } = await import('../../../lib/store.js');
@@ -92,6 +100,11 @@ async function handle(request) {
   }
   const items = bulletin.items;
   const bulletinText = makeText(bulletin);
+  // מעקב האזנות (ברקע, לא מעכב את ההקראה)
+  {
+    const ev = !choice ? 'start' : choice === '0' ? 'replay' : choice === 'None' ? 'end' : 'item';
+    bg(() => trackListen(p, sys, ev, { item: choice, bulletinAt: have?.at ? new Date(have.at) : null }));
+  }
 
   // כניסה לשלוחה, או בקשה לשמיעה חוזרת
   if (!choice || choice === '0') {

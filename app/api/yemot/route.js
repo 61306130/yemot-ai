@@ -6,6 +6,7 @@ import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../l
 import { aiPrefs, transcribe, answer as aiAnswer, searchAnswer } from '../../../lib/ai.js';
 import { say, callFileName, plainTts } from '../../../lib/voice.js';
 import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
+import { filterSettings, filterRule, findBlocked } from '../../../lib/filter.js';
 import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
 import { resolveSystem, enterSystem, currentToken, isSystemOwner } from '../../../lib/systems.js';
 import { waitUntil } from '@vercel/functions';
@@ -322,7 +323,15 @@ async function handle(request) {
       st['bot.niqqud'] !== false
         ? '\n- התשובה מוקראת על ידי מנוע הקראה שמתבלבל במילים בלי ניקוד. הוסף ניקוד מלא ומדויק למילים שאפשר לקרוא ביותר מדרך אחת, לשמות של אנשים ומקומות ולמילים לועזיות. מילים ברורות השאר בלי ניקוד.'
         : '';
-    const BASE = SYSTEM_PROMPT + NIQQUD + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
+    const FLT = filterSettings(st);
+    // סינון: שאלה עם מילה חסומה - לא שולחים ל-AI בכלל
+    const badQ = FLT.on && findBlocked(transcript, FLT.words);
+    if (badQ) {
+      logError('filter', `שאלה נחסמה (${badQ}) · ${phone} · ${transcript.slice(0, 200)}`);
+      const [a, m] = await Promise.all([say(FLT.reply, { cache: true }), say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true })]);
+      return reply(`id_list_message=${a}&` + recordRead(m, n + 1));
+    }
+    const BASE = SYSTEM_PROMPT + NIQQUD + (FLT.on ? '\n' + filterRule(FLT.reply) : '') + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
     const searchOn = st['bot.search'] !== false;
     const forceSearch = searchOn && MUST_SEARCH.test(transcript);
     let { text: answer, provider: aiBy } = forceSearch
@@ -353,6 +362,12 @@ async function handle(request) {
           deadline + 3000
         ));
       }
+    }
+    // סינון: תשובה עם מילה חסומה - מחליפים בתשובת הסירוב
+    if (FLT.on) {
+      const badA = findBlocked(answer, FLT.words);
+      if (badA) { logError('filter', `תשובה נחסמה (${badA}) · ${phone} · ${transcript.slice(0, 120)}`); answer = FLT.reply; }
+      else if (answer.includes(FLT.reply.slice(0, 20))) logError('filter', `ה-AI סירב · ${phone} · ${transcript.slice(0, 200)}`);
     }
     console.log(`המתקשר אמר (${sttBy}):`, transcript, `| AI ענה (${aiBy}):`, answer);
 

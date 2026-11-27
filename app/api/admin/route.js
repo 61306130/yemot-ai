@@ -127,6 +127,19 @@ async function handle(request, ctx) {
     }
 
     // ----- תפריט ראשי (יצירת קובץ קול) -----
+    // יצירה מחדש של כל ההודעות בקול הנוכחי: step=cache (בסבבים, עד left=0), אחר כך step=menus
+    if (path === 'voice/regen' && method === 'POST') {
+      const { step } = await body(request);
+      if (step === 'menus') {
+        const st = await getSettings();
+        const main = st['menu.text'] ? await speakToPath(st['menu.text'], st['menu.path'] || '/M1000').catch((e) => ({ error: e.message })) : null;
+        const baseUrl = process.env.PUBLIC_BASE_URL || new URL(request.url).origin;
+        const systems = await refreshAllSystems({ baseUrl, speakMenu: speakToPath, limit: 30 });
+        return json({ main, systems });
+      }
+      const { regenAll } = await import('../../../lib/voice.js');
+      return json(await regenAll({ budgetMs: 45000 }));
+    }
     if (path === 'menu/publish' && method === 'POST') {
       const s = await getSettings();
       const text = (await body(request)).text || s['menu.text'];
@@ -153,6 +166,11 @@ async function handle(request, ctx) {
       return json({ bulletin: b });
     }
 
+    if (path === 'news/stats' && method === 'GET') {
+      const { newsStats } = await import('../../../lib/newsstats.js');
+      const days = Math.min(90, Math.max(1, Number(new URL(request.url).searchParams.get('days')) || 14));
+      return json({ stats: await newsStats(days) });
+    }
     if (path === 'transit/log' && method === 'GET') {
       const { transitLog } = await import('../../../lib/transit.js');
       return json({ log: await transitLog() });

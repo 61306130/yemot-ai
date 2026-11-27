@@ -14,7 +14,7 @@ const CSS = `
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{font-family:'Heebo',system-ui,sans-serif;background:var(--bg);color:var(--txt);
-  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  min-height:100vh;overflow-x:clip;-webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
 input,textarea,select{font-family:inherit}
 ::-webkit-scrollbar{width:10px;height:10px}
@@ -48,7 +48,7 @@ input,textarea,select{font-family:inherit}
 
 /* פריסה */
 .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh;gap:18px;padding:18px}
-.side{position:sticky;top:18px;height:calc(100vh - 36px);padding:22px 16px;display:flex;flex-direction:column;gap:6px;animation:rise .6s both}
+.side{position:sticky;top:18px;align-self:start;height:calc(100vh - 36px);padding:22px 16px;display:flex;flex-direction:column;gap:6px;animation:rise .6s both}
 .brand{display:flex;align-items:center;gap:12px;padding:6px 10px 20px}
 .brand .mark{width:42px;height:42px;border-radius:13px;background:var(--grad);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 8px 24px rgba(124,92,255,.45)}
 .brand b{font-size:18px;font-weight:800;letter-spacing:-.3px;display:block;line-height:1.1}
@@ -79,7 +79,7 @@ input,textarea,select{font-family:inherit}
 .grid{display:grid;gap:16px}
 .grid.cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .grid.cols.wide{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
-html,body{overflow-x:hidden}
+html,body{overflow-x:clip}
 .stats{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
 .stat{padding:20px;border-radius:var(--radius);position:relative;overflow:hidden;transition:.25s;animation:rise .5s both}
 .stat:hover{transform:translateY(-4px)}
@@ -911,6 +911,34 @@ function BotUsers({ api, notify }) {
   );
 }
 
+function RegenVoice({ api, notify }) {
+  const [st, setSt] = useState(null);
+  const run = async () => {
+    if (!confirm('ליצור מחדש את כל ההודעות בכל המערכות בקול שנבחר? (קודם לשמור את ההגדרות)')) return;
+    let done = 0;
+    try {
+      for (let i = 0; i < 40; i++) {
+        setSt({ msg: `יוצר הודעות בקול החדש... ${done} נוצרו` });
+        const r = await api('voice/regen', { method: 'POST', body: { step: 'cache' } });
+        done += r.done || 0;
+        setSt({ msg: `יוצר הודעות בקול החדש... ${done} נוצרו, נשארו ${r.left}` });
+        if (!r.left || (!r.done && r.failed)) break;
+      }
+      setSt({ msg: `${done} הודעות נוצרו. מעדכן את התפריטים בכל המערכות...` });
+      const m = await api('voice/regen', { method: 'POST', body: { step: 'menus' } });
+      const bad = (m.systems || []).filter((x) => !x.ok).length;
+      setSt({ msg: `הסתיים: ${done} הודעות, התפריט הראשי ו-${(m.systems || []).length} מערכות${bad ? ` (${bad} עם תקלה)` : ''}` });
+      notify('כל ההודעות נוצרו מחדש');
+    } catch (e) { setSt({ msg: e.message }); notify(e.message, 'err'); }
+  };
+  return (
+    <div style={{ margin: '4px 0 12px' }}>
+      <button className="btn ghost sm" onClick={run}>יצירה מחדש של כל ההודעות בקול הזה</button>
+      {st && <div className="mt" style={{ marginTop: 6 }}>{st.msg}</div>}
+    </div>
+  );
+}
+
 function BotSettings({ api, notify }) {
   const [d, reload, err] = useLoad(() => api('settings'), [api]);
   const [s, setS] = useState(null);
@@ -926,6 +954,7 @@ function BotSettings({ api, notify }) {
         'bot.dailyLimitOwner': Math.max(0, Number(s['bot.dailyLimitOwner']) || 0),
         'bot.music': s['bot.music'] !== false,
         'bot.vertex': s['bot.vertex'] !== false,
+        'bot.filter': s['bot.filter'] !== false, 'bot.filterWords': s['bot.filterWords'] || '', 'bot.filterReply': s['bot.filterReply'] || '',
       } });
       notify('ההגדרות נשמרו');
     } catch (e) { notify(e.message, 'err'); }
@@ -963,7 +992,19 @@ function BotSettings({ api, notify }) {
             <button className={`sw ${s['bot.search'] ? 'on' : ''}`} onClick={() => up('bot.search', !s['bot.search'])} />
           </div>
           <div className="swrow">
-            <div className="tx"><b>Gemini המתקדם (Vertex)</b><span>עונה ראשון, הכי חכם ומהיר. בערך עשירית סנט לתשובה מקרדיט הניסיון של גוגל. כבוי = Gemini החינמי ו-Groq בלבד</span></div>
+            <div className="tx"><b>סינון תכנים</b><span>בוטי לא עוסק בנושאים לא ראויים (תוכן לא צנוע, קללות, לשון הרע, הימורים ועוד), ושאלות עם מילה חסומה לא מגיעות ל-AI בכלל. כל חסימה נרשמת ביומן</span></div>
+            <button className={`sw ${s['bot.filter'] !== false ? 'on' : ''}`} onClick={() => up('bot.filter', s['bot.filter'] === false)} />
+          </div>
+          {s['bot.filter'] !== false && <>
+            <label className="fld"><span className="lb">מילים וביטויים חסומים (פסיק או שורה בין אחד לשני)</span>
+              <textarea className="inp" rows={3} value={s['bot.filterWords'] || ''} onChange={(e) => up('bot.filterWords', e.target.value)} placeholder="למשל: קזינו, הימורים" />
+            </label>
+            <label className="fld"><span className="lb">מה בוטי עונה על נושא חסום (ריק = ברירת המחדל)</span>
+              <input className="inp" value={s['bot.filterReply'] || ''} onChange={(e) => up('bot.filterReply', e.target.value)} placeholder="על הנושא הזה אני לא מדבר. אפשר לשאול אותי על משהו אחר." />
+            </label>
+          </>}
+          <div className="swrow">
+            <div className="tx"><b>Gemini המתקדם (Vertex)</b><span>גיבוי כשהחינמיים לא עונים, וראשון בשאלות עם חיפוש בגוגל. בערך עשירית סנט לתשובה מקרדיט הניסיון. כבוי = Gemini החינמי ו-Groq בלבד</span></div>
             <button className={`sw ${s['bot.vertex'] !== false ? 'on' : ''}`} onClick={() => up('bot.vertex', s['bot.vertex'] === false)} />
           </div>
           <div className="swrow">
@@ -979,6 +1020,7 @@ function BotSettings({ api, notify }) {
               {voices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
+          <RegenVoice api={api} notify={notify} />
           <label className="fld"><span className="lb">מקסימום שאלות לכל מתקשר ביום (0 = בלי הגבלה)</span>
             <input className="inp" type="number" min="0" max="500" value={s['bot.dailyLimit'] ?? 20} onChange={(e) => up('bot.dailyLimit', e.target.value)} />
           </label>
@@ -1080,7 +1122,69 @@ function NewsTab({ api, notify }) {
           </>
         )}
       </div>
+      <NewsListens api={api} />
     </>
+  );
+}
+
+function NewsListens({ api }) {
+  const [days, setDays] = useState(14);
+  const [q, setQ] = useState('');
+  const [d, reload, err] = useLoad(() => api(`news/stats?days=${days}`), [api, days]);
+  const st = d?.stats;
+  const secs = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 1000));
+  const dur = (s) => (s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} דק'` : `${s} שנ'`);
+  const rows = (st?.recent || []).filter((r) => !q || (r.name || '').includes(q) || (r.phone || '').includes(q.replace(/\D/g, '') || '@@'));
+  return (
+    <div className="card glass" style={{ marginTop: 16 }}>
+      <div className="ch">
+        <div><h3>מי האזין לחדשות</h3><p>האזנות לשלוחת החדשות בכל המערכות</p></div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select className="inp" style={{ width: 'auto' }} value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={1}>היום ואתמול</option><option value={7}>שבוע</option><option value={14}>שבועיים</option><option value={30}>חודש</option><option value={90}>3 חודשים</option>
+          </select>
+          <button className="btn ghost sm" onClick={reload}>רענון</button>
+        </div>
+      </div>
+      {err ? <Empty text={err} /> : !st ? <Loading /> : !st.listens ? <Empty icon="🎧" text="עוד אין האזנות בתקופה הזו. ההאזנות נספרות מהיום" /> : (
+        <>
+          <div className="grid stats" style={{ marginBottom: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))' }}>
+            <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 24 }}>{st.listens}</div><div className="l">האזנות</div></div>
+            <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 24 }}>{st.people}</div><div className="l">מאזינים שונים</div></div>
+            <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 24 }}>{st.today}</div><div className="l">היום</div></div>
+            <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 20 }}>{dur(st.avg_secs)}</div><div className="l">זמן האזנה ממוצע</div></div>
+          </div>
+          {st.byDay.length > 1 && <>
+            <h4 style={{ margin: '6px 0 4px' }}>האזנות לפי יום</h4>
+            <MiniBars data={st.byDay.map((x) => x.c)} labels={st.byDay.map((x) => new Date(x.day).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }))} every={Math.ceil(st.byDay.length / 10)} />
+          </>}
+          <h4 style={{ margin: '18px 0 4px' }}>באילו שעות מאזינים</h4>
+          <MiniBars data={st.byHour} labels={st.byHour.map((_, i) => String(i))} every={3} />
+          {st.topItems.length > 0 && <div className="mt" style={{ margin: '14px 0 4px' }}>הידיעות שביקשו לשמוע בפירוט: {st.topItems.map((t) => `ידיעה ${t.item} (${t.c})`).join(' · ')}</div>}
+          <h4 style={{ margin: '18px 0 8px' }}>האזנות אחרונות</h4>
+          <input className="inp" style={{ marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש לפי שם או טלפון" />
+          <div className="rows">
+            {rows.map((r) => (
+              <div className="row" key={r.call_id}>
+                <div className="av">{initials(r.name) || '🎧'}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="nm">{r.name || (r.phone ? fmtPhone(r.phone) : 'מספר חסוי')}</div>
+                  <div className="mt">
+                    {r.name && r.phone ? fmtPhone(r.phone) + ' · ' : ''}
+                    {new Date(r.started_at).toLocaleString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {r.ended ? ` · ${dur(secs(r.started_at, r.last_at))}` : ''}
+                    {r.items?.length ? ` · ביקש ידיעות ${[...new Set(r.items)].join(', ')}` : ''}
+                    {r.replays ? ` · שמע שוב ${r.replays}` : ''}
+                    {r.did ? ` · מערכת ${r.owner_name || r.did}` : ' · הקו הראשי'}
+                  </div>
+                </div>
+                <div className="end">{timeAgo(r.started_at)}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1386,7 +1490,7 @@ function Voters({ api }) {
 }
 
 /* ============================ מערכת ============================ */
-const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי', translate: 'תרגומון', setup: 'פתיחת מערכת' };
+const SRC = { news: 'חדשות', transit: 'תחבורה', podcast: 'פודקאסט', vote: 'הצבעה', 'vote-admin': 'ניהול הצבעה', 'ai-call': 'בוט AI', 'ai-busy': 'עומס AI', 'admin-api': 'אתר ניהול', cleanup: 'ניקוי', translate: 'תרגומון', setup: 'פתיחת מערכת', filter: 'סינון תכנים', 'voice-late': 'קול באיחור', 'voice-fail': 'קול נכשל', 'chirp-fail': 'Chirp נכשל', 'voice-pause': 'קול מושבת' };
 function System({ api, notify }) {
   const [e, reloadE, errE] = useLoad(() => api('errors'), [api]);
   const [u, reloadU] = useLoad(() => api('usage'), [api]);
