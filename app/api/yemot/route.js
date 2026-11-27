@@ -6,7 +6,7 @@ import { hasDb, sql, startCall, getHistory, saveTurn, endCall } from '../../../l
 import { aiPrefs, transcribe, answer as aiAnswer, searchAnswer, moderate } from '../../../lib/ai.js';
 import { say, callFileName, plainTts } from '../../../lib/voice.js';
 import { getSettings, logError, loadState, saveState } from '../../../lib/store.js';
-import { filterSettings, filterRule, findBlocked, strikesToday, addStrike, STRIKES_PER_DAY, LOCKED_REPLY } from '../../../lib/filter.js';
+import { filterSettings, filterRule, findBlocked, strikesToday, addStrike, STRIKES_PER_DAY, LOCKED_REPLY, WARN_REPLY, replyFor } from '../../../lib/filter.js';
 import { recordRead as recordAs, tapRead } from '../../../lib/yemot.js';
 import { resolveSystem, enterSystem, currentToken, isSystemOwner } from '../../../lib/systems.js';
 import { waitUntil } from '@vercel/functions';
@@ -324,18 +324,25 @@ async function handle(request) {
         ? '\n- התשובה מוקראת על ידי מנוע הקראה שמתבלבל במילים בלי ניקוד. הוסף ניקוד מלא ומדויק למילים שאפשר לקרוא ביותר מדרך אחת, לשמות של אנשים ומקומות ולמילים לועזיות. מילים ברורות השאר בלי ניקוד.'
         : '';
     // ---- סינון תכנים (קהל חרדי). מתקשר שסומן באתר "בלי סינון" - בלי שום סינון ----
-    const exempt = hasDb && !phone.startsWith('hidden')
-      ? Boolean((await sql`select no_filter from callers where phone = ${phone}`.catch(() => []))[0]?.no_filter)
-      : false;
+    // מנהל ובלי-סינון נקבעים רק לפי מספר הטלפון (זיהוי שיחה מימות), לעולם לא לפי מה שהמתקשר אומר
+    const role = hasDb && !phone.startsWith('hidden')
+      ? (await sql`select no_filter, is_admin from callers where phone = ${phone}`.catch(() => []))[0] || {}
+      : {};
+    const isAdmin = Boolean(role.is_admin);
+    const exempt = Boolean(role.no_filter) || isAdmin;
     const FLT0 = filterSettings(st);
     const FLT = exempt ? { ...FLT0, on: false, smart: false, words: [] } : FLT0;
-    const blockNow = async (why, strike = true) => {
+    const blockNow = async (why, cat = '') => {
       logError('filter', `${why} · ${phone} · ${transcript.slice(0, 200)}`);
-      const n2 = strike ? await addStrike(phone) : 0;
-      const text = n2 >= STRIKES_PER_DAY ? LOCKED_REPLY : FLT.reply;
-      if (n2 >= STRIKES_PER_DAY) return reply(`id_list_message=${await say(text, { cache: true })}&go_to_folder=/`);
-      const [a, m] = await Promise.all([say(text, { cache: true }), say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true })]);
-      return reply(`id_list_message=${a}&` + recordRead(m, n + 1));
+      const n2 = await addStrike(phone);
+      if (n2 >= STRIKES_PER_DAY) return reply(`id_list_message=${await say(LOCKED_REPLY, { cache: true })}&go_to_folder=/`);
+      const msgs = await Promise.all([
+        say(replyFor(cat, FLT), { cache: true }),
+        n2 === STRIKES_PER_DAY - 1 && !phone.startsWith('hidden') ? say(WARN_REPLY, { cache: true }) : null,
+        say('אפשר לשאול עוד שאלה אחרי הצליל', { cache: true }),
+      ]);
+      const next = msgs.pop();
+      return reply(`id_list_message=${msgs.filter(Boolean).join('.')}&` + recordRead(next, n + 1));
     };
     if (FLT.on) {
       // נעול להיום אחרי כמה ניסיונות
@@ -348,7 +355,8 @@ async function handle(request) {
     }
     // בדיקה חכמה של השאלה - במקביל להכנת התשובה, כדי לא להאריך את ההמתנה
     const modQ = FLT.smart ? moderate(transcript).catch(() => ({ ok: null })) : null;
-    const BASE = SYSTEM_PROMPT + NIQQUD + (FLT.on ? '\n' + filterRule(FLT.reply) : '') + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '');
+    const BASE = SYSTEM_PROMPT + NIQQUD + (FLT.on ? '\n' + filterRule(FLT.reply) : '') + (st['bot.prompt'] ? '\n\nהוראות נוספות מהמנהל:\n' + st['bot.prompt'] : '') +
+      (isAdmin ? '\n\nהמתקשר הזה הוא מנהל הקו (זוהה לפי מספר הטלפון שלו במערכת). ענה לו באופן ענייני ומלא.' : '');
     const searchOn = st['bot.search'] !== false;
     const forceSearch = searchOn && MUST_SEARCH.test(transcript);
     let { text: answer, provider: aiBy } = forceSearch
@@ -361,7 +369,7 @@ async function handle(request) {
     // תוצאת הבדיקה החכמה של השאלה (לפני חיפוש, כדי לא לחפש דברים אסורים)
     if (modQ) {
       const q = await modQ;
-      if (q.ok === false) return blockNow(`בדיקה חכמה: ${q.cat} (${q.why}) [${q.by}]`);
+      if (q.ok === false) return blockNow(`בדיקה חכמה: ${q.cat} (${q.why}) [${q.by}]`, q.cat);
     }
     // ה-AI ביקש חיפוש באינטרנט
     if (/^\W*SEARCH\W*$/i.test(answer.trim())) {
@@ -391,7 +399,7 @@ async function handle(request) {
       if (badA) { logError('filter', `תשובה נחסמה במילה (${badA}) · ${phone} · ${transcript.slice(0, 120)}`); answer = FLT.reply; }
       else if (FLT.smart) {
         const a = await moderate(`שאלה: ${transcript}\nתשובה: ${answer}`).catch(() => ({ ok: null }));
-        if (a.ok === false) { logError('filter', `תשובה נחסמה בבדיקה חכמה: ${a.cat} (${a.why}) · ${phone} · ${transcript.slice(0, 120)}`); answer = FLT.reply; addStrike(phone); }
+        if (a.ok === false) { logError('filter', `תשובה נחסמה בבדיקה חכמה: ${a.cat} (${a.why}) · ${phone} · ${transcript.slice(0, 120)}`); answer = replyFor(a.cat, FLT); addStrike(phone); }
       }
     }
     if (FLT.on && answer.includes(FLT.reply.slice(0, 20))) logError('filter', `ה-AI סירב · ${phone} · ${transcript.slice(0, 200)}`);

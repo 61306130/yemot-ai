@@ -858,6 +858,14 @@ function BotUsers({ api, notify }) {
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{new Date(c.first_call_at).toLocaleDateString('he-IL')}</div><div className="l">שיחה ראשונה</div></div>
                 <div className="stat glass" style={{ padding: 14 }}><div className="v" style={{ fontSize: 15 }}>{timeAgo(c.last_call_at)}</div><div className="l">שיחה אחרונה</div></div>
               </div>
+              <div className="swrow">
+                <div className="tx"><b>מנהל</b><span>{c.is_admin ? 'מזוהה כמנהל לפי מספר הטלפון: בלי סינון, ויקבל יכולות ניהול בשיחה' : 'מתקשר רגיל'}</span></div>
+                <button className={`sw ${c.is_admin ? 'on' : ''}`} onClick={async () => {
+                  if (!c.is_admin && !confirm('להגדיר את המספר הזה כמנהל?')) return;
+                  try { await api('callers', { method: 'POST', body: { phone: sel, is_admin: !c.is_admin } }); notify(c.is_admin ? 'הוסר מהמנהלים' : 'הוגדר כמנהל'); pick(sel); }
+                  catch (e) { notify(e.message, 'err'); }
+                }} />
+              </div>
               <div className="swrow" style={{ marginBottom: 12 }}>
                 <div className="tx"><b>בלי סינון תכנים</b><span>{c.no_filter ? 'המשתמש הזה מקבל תשובות בלי שום סינון' : 'המשתמש מסונן כמו כולם'}</span></div>
                 <button className={`sw ${c.no_filter ? 'on' : ''}`} onClick={async () => {
